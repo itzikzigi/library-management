@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react'
-import { BOOKS } from '../../mock/books'
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { BookCard } from '../../components/BookCard'
+import { listBooks, type ListParams } from '../../api/books'
 
 const CATEGORIES = [
   'All',
@@ -14,36 +15,35 @@ const CATEGORIES = [
   'Tech',
 ]
 
-const SORTS = ['Most relevant', 'Highest rated', 'Newest', 'Recently added'] as const
-type Sort = (typeof SORTS)[number]
+const SORTS = [
+  { label: 'A → Z', value: 'title' },
+  { label: 'Newest', value: 'newest' },
+] as const
 
 export function CatalogPage() {
   const [query, setQuery] = useState('')
   const [cat, setCat] = useState('All')
-  const [sort, setSort] = useState<Sort>('Most relevant')
+  const [sort, setSort] = useState<ListParams['sort']>('title')
   const [available, setAvailable] = useState(false)
 
-  const list = useMemo(() => {
-    let xs = BOOKS
-    if (query) {
-      const q = query.toLowerCase()
-      xs = xs.filter(
-        (b) => b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q),
-      )
-    }
-    if (cat !== 'All') xs = xs.filter((b) => b.categories.includes(cat))
-    if (available) xs = xs.filter((b) => b.available > 0)
-    if (sort === 'Highest rated') xs = [...xs].sort((a, b) => b.rating - a.rating)
-    if (sort === 'Newest') xs = [...xs].sort((a, b) => b.year - a.year)
-    return xs
-  }, [query, cat, sort, available])
+  const params: ListParams = {
+    q: query.trim() || undefined,
+    category: cat !== 'All' ? cat : undefined,
+    availableOnly: available || undefined,
+    sort,
+  }
+
+  const { data: books, isLoading, isError, error } = useQuery({
+    queryKey: ['books', params],
+    queryFn: () => listBooks(params),
+  })
 
   return (
     <div className="mx-auto max-w-7xl px-6 py-8">
       <div className="flex flex-col gap-2 mb-6">
         <h1 className="text-3xl text-ink-900">Catalog</h1>
         <p className="text-sm text-ink-500">
-          Browse {BOOKS.length} titles. Filter by category, search by author or title.
+          Browse the collection. Filter by category, search by author or title.
         </p>
       </div>
 
@@ -52,7 +52,7 @@ export function CatalogPage() {
           <div className="relative flex-1">
             <input
               className="input pl-9"
-              placeholder="Search titles, authors, tags…"
+              placeholder="Search titles, authors…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
@@ -61,10 +61,12 @@ export function CatalogPage() {
           <select
             className="input md:w-56"
             value={sort}
-            onChange={(e) => setSort(e.target.value as Sort)}
+            onChange={(e) => setSort(e.target.value as ListParams['sort'])}
           >
             {SORTS.map((s) => (
-              <option key={s}>{s}</option>
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
             ))}
           </select>
         </div>
@@ -94,12 +96,36 @@ export function CatalogPage() {
         </div>
       </div>
 
-      <div className="text-xs text-ink-500 mb-3">{list.length} results</div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-        {list.map((b) => (
-          <BookCard key={b.id} book={b} />
-        ))}
-      </div>
+      {isLoading && <ResultsSkeleton />}
+      {isError && (
+        <div className="card p-6 text-sm text-coral-dark">
+          Couldn't load the catalog: {(error as Error).message}
+        </div>
+      )}
+      {books && (
+        <>
+          <div className="text-xs text-ink-500 mb-3">{books.length} results</div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            {books.map((b) => (
+              <BookCard key={b.id} book={b} />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function ResultsSkeleton() {
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+      {Array.from({ length: 10 }).map((_, i) => (
+        <div key={i} className="card p-4 animate-pulse">
+          <div className="h-44 bg-ink-100 rounded mx-auto w-32" />
+          <div className="h-4 bg-ink-100 rounded mt-4 w-3/4" />
+          <div className="h-3 bg-ink-100 rounded mt-2 w-1/2" />
+        </div>
+      ))}
     </div>
   )
 }

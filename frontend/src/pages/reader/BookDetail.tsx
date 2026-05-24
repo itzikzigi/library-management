@@ -1,27 +1,54 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { BOOKS, findBook } from '../../mock/books'
+import { useQuery } from '@tanstack/react-query'
 import { BookCover } from '../../components/BookCover'
 import { BookCard } from '../../components/BookCard'
 import { StarRating } from '../../components/StarRating'
+import { getBook, listBooks } from '../../api/books'
 
 export function BookDetailPage() {
-  const { id } = useParams()
-  const book = findBook(id ?? '')
+  const { id } = useParams<{ id: string }>()
   const [userRating, setUserRating] = useState(0)
 
-  if (!book) {
+  const bookQuery = useQuery({
+    queryKey: ['book', id],
+    queryFn: () => getBook(id!),
+    enabled: !!id,
+  })
+  const allBooksQuery = useQuery({
+    queryKey: ['books', {}],
+    queryFn: () => listBooks({}),
+    staleTime: 60_000,
+  })
+
+  if (bookQuery.isLoading) {
     return (
-      <div className="mx-auto max-w-3xl p-8">
-        <p>Book not found.</p>
-        <Link to="/" className="btn-secondary mt-4">Back to catalog</Link>
+      <div className="mx-auto max-w-3xl px-6 py-12">
+        <div className="animate-pulse space-y-4">
+          <div className="h-72 w-52 bg-ink-100 rounded" />
+          <div className="h-10 bg-ink-100 rounded w-2/3" />
+          <div className="h-4 bg-ink-100 rounded w-1/3" />
+        </div>
       </div>
     )
   }
 
-  const similar = BOOKS.filter(
-    (b) => b.id !== book.id && b.categories.some((c) => book.categories.includes(c)),
-  ).slice(0, 4)
+  if (bookQuery.isError || !bookQuery.data) {
+    return (
+      <div className="mx-auto max-w-3xl p-8">
+        <p className="text-coral-dark">Book not found.</p>
+        <Link to="/" className="btn-secondary mt-4 inline-flex">
+          Back to catalog
+        </Link>
+      </div>
+    )
+  }
+
+  const book = bookQuery.data
+  const similar =
+    (allBooksQuery.data ?? [])
+      .filter((b) => b.id !== book.id && b.categories.some((c) => book.categories.includes(c)))
+      .slice(0, 4)
 
   const availability =
     book.available === 0
@@ -54,18 +81,23 @@ export function BookDetailPage() {
             </div>
             <h1 className="text-4xl text-ink-900">{book.title}</h1>
             <p className="text-ink-500 mt-1">
-              {book.author} · {book.year} · {book.language === 'he' ? 'Hebrew' : 'English'}
+              {book.author} · {book.year ?? '—'} ·{' '}
+              {book.language === 'HE' ? 'Hebrew' : 'English'}
             </p>
             <div className="flex items-center gap-3 mt-4">
-              <StarRating value={book.rating} />
+              <StarRating value={book.rating ?? 0} />
               <span className="text-sm text-ink-600">
-                {book.rating.toFixed(1)} · {book.ratingsCount} ratings
+                {book.rating !== null
+                  ? `${book.rating.toFixed(1)} · ${book.ratingsCount} ratings`
+                  : 'No ratings yet'}
               </span>
               <span className={availability.cls}>{availability.label}</span>
             </div>
           </div>
 
-          <p className="text-ink-700 leading-relaxed max-w-prose">{book.blurb}</p>
+          {book.blurb && (
+            <p className="text-ink-700 leading-relaxed max-w-prose">{book.blurb}</p>
+          )}
 
           <div className="card p-5 max-w-prose">
             <h3 className="text-sm font-medium text-ink-800 mb-2">Rate this book</h3>
@@ -81,23 +113,25 @@ export function BookDetailPage() {
             </div>
           </div>
 
-          <div>
-            <div className="text-xs text-ink-500 mb-2">Tags</div>
-            <div className="flex flex-wrap gap-2">
-              {book.tags.map((t) => (
-                <span key={t} className="chip">#{t}</span>
-              ))}
+          {book.tags.length > 0 && (
+            <div>
+              <div className="text-xs text-ink-500 mb-2">Tags</div>
+              <div className="flex flex-wrap gap-2">
+                {book.tags.map((t) => (
+                  <span key={t} className="chip">#{t}</span>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           <dl className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
             <div>
               <dt className="text-xs text-ink-500">ISBN</dt>
-              <dd className="text-ink-800">978-0-{book.id.slice(2)}-X</dd>
+              <dd className="text-ink-800">{book.isbn ?? '—'}</dd>
             </div>
             <div>
               <dt className="text-xs text-ink-500">Shelf</dt>
-              <dd className="text-ink-800">{book.language === 'he' ? 'A-3' : 'B-7'}</dd>
+              <dd className="text-ink-800">{book.shelfCode ?? '—'}</dd>
             </div>
             <div>
               <dt className="text-xs text-ink-500">Loan period</dt>

@@ -1,12 +1,20 @@
 import { Link } from 'react-router-dom'
-import { BOOKS } from '../../mock/books'
+import { useQuery } from '@tanstack/react-query'
 import { BookCard } from '../../components/BookCard'
+import { listBooks, type CatalogBook } from '../../api/books'
 
 export function RecommendationsPage() {
-  const becauseYouLiked = BOOKS.filter((b) => ['b-002', 'b-006', 'b-004'].includes(b.id))
-  const similarReaders = BOOKS.filter((b) => ['b-010', 'b-008', 'b-012', 'b-009'].includes(b.id))
-  const trending = BOOKS.filter((b) => ['b-005', 'b-011', 'b-001'].includes(b.id))
-  const hiddenGems = BOOKS.filter((b) => ['b-003', 'b-007'].includes(b.id))
+  const { data: books = [], isLoading } = useQuery({
+    queryKey: ['books', {}],
+    queryFn: () => listBooks({}),
+  })
+
+  // Placeholder slicing until the real recommender endpoint exists.
+  // The hybrid algorithm (chapter 10) will replace these with scored sets.
+  const becauseYouLiked = pickSlice(books, 0, 4)
+  const similarReaders = pickSlice(books, 3, 7)
+  const trending = pickSlice(books, 7, 10)
+  const hiddenGems = pickSlice(books, 9, 11)
 
   return (
     <div className="mx-auto max-w-7xl px-6 py-8 space-y-12">
@@ -19,11 +27,15 @@ export function RecommendationsPage() {
           you accumulate ratings.
         </p>
         <div className="flex gap-3 mt-3 text-xs text-ink-500">
-          <span>Profile: <strong className="text-ink-800">14 ratings</strong></span>
-          <span>α (content / collab): <strong className="text-ink-800">0.62 / 0.38</strong></span>
+          <span>Profile: <strong className="text-ink-800">5 ratings</strong></span>
+          <span>α (content / collab): <strong className="text-ink-800">0.78 / 0.22</strong></span>
           <span>Last refresh: <strong className="text-ink-800">today, 06:00</strong></span>
         </div>
       </header>
+
+      {isLoading && (
+        <div className="text-sm text-ink-500">Loading recommendations…</div>
+      )}
 
       <Section
         title="Because you liked The Name of the Wind"
@@ -86,6 +98,10 @@ export function RecommendationsPage() {
       </aside>
     </div>
   )
+}
+
+function pickSlice(books: CatalogBook[], from: number, to: number) {
+  return books.slice(from, Math.min(to, books.length))
 }
 
 function Section({

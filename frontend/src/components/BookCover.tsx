@@ -1,7 +1,15 @@
-import type { Book } from '../mock/books'
+import { coverFor } from '../lib/coverFor'
+
+export type BookCoverInput = {
+  id: string
+  title: string
+  author: string
+  language?: 'HE' | 'EN' | 'he' | 'en' | null
+  cover?: { from: string; to: string }
+}
 
 type Props = {
-  book: Pick<Book, 'title' | 'author' | 'cover' | 'language'>
+  book: BookCoverInput
   size?: 'sm' | 'md' | 'lg'
 }
 
@@ -12,12 +20,14 @@ const SIZES: Record<NonNullable<Props['size']>, string> = {
 }
 
 export function BookCover({ book, size = 'md' }: Props) {
-  const dir = book.language === 'he' ? 'rtl' : 'ltr'
+  const cover = book.cover ?? coverFor(book.id)
+  const lang = book.language?.toLowerCase()
+  const dir = lang === 'he' ? 'rtl' : 'ltr'
   return (
     <div
       className={`${SIZES[size]} relative shrink-0 rounded-r-md rounded-l-sm shadow-book overflow-hidden`}
       style={{
-        background: `linear-gradient(135deg, ${book.cover.from} 0%, ${book.cover.to} 100%)`,
+        background: `linear-gradient(135deg, ${cover.from} 0%, ${cover.to} 100%)`,
       }}
       dir={dir}
     >

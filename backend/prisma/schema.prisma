@@ -1,0 +1,201 @@
+// Library Management — Prisma schema
+// See docs/decisions/0001-data-model.md for the design rationale.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// -----------------------------------------------------------------------------
+// Enums
+// -----------------------------------------------------------------------------
+
+enum Role {
+  READER
+  LIBRARIAN
+}
+
+enum Language {
+  HE
+  EN
+}
+
+enum CopyStatus {
+  AVAILABLE
+  ON_LOAN
+  LOST
+  WITHDRAWN
+}
+
+enum ReservationStatus {
+  PENDING
+  FULFILLED
+  CANCELLED
+  EXPIRED
+}
+
+// -----------------------------------------------------------------------------
+// Identity
+// -----------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  role         Role     @default(READER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  loans         Loan[]
+  reservations  Reservation[]
+  ratings       Rating[]
+  refreshTokens RefreshToken[]
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique // sha256 of the raw token; raw is never stored
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+// -----------------------------------------------------------------------------
+// Catalog
+// -----------------------------------------------------------------------------
+
+model Author {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  bio       String?
+  createdAt DateTime @default(now())
+
+  books Book[]
+}
+
+model Category {
+  id   String @id @default(cuid())
+  name String @unique
+  slug String @unique
+
+  books Book[]
+}
+
+model Tag {
+  id   String @id @default(cuid())
+  name String @unique
+
+  books Book[]
+}
+
+model Book {
+  id        String   @id @default(cuid())
+  isbn      String?  @unique
+  title     String
+  blurb     String?
+  year      Int?
+  language  Language
+  shelfCode String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  authorId String
+  author   Author @relation(fields: [authorId], references: [id], onDelete: Restrict)
+
+  categories   Category[]
+  tags         Tag[]
+  copies       BookCopy[]
+  reservations Reservation[]
+  ratings      Rating[]
+
+  @@index([title])
+  @@index([authorId])
+}
+
+// One physical copy on the shelf. Allows multi-copy holdings with per-copy
+// status, withdrawal, and lost tracking — see ADR-0001.
+model BookCopy {
+  id         String     @id @default(cuid())
+  barcode    String     @unique
+  status     CopyStatus @default(AVAILABLE)
+  acquiredAt DateTime   @default(now())
+
+  bookId String
+  book   Book   @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  loans Loan[]
+
+  @@index([bookId])
+  @@index([status])
+}
+
+// -----------------------------------------------------------------------------
+// Circulation
+// -----------------------------------------------------------------------------
+
+model Loan {
+  id         String    @id @default(cuid())
+  borrowedAt DateTime  @default(now())
+  dueAt      DateTime
+  returnedAt DateTime?
+  renewals   Int       @default(0)
+
+  borrowerId String
+  borrower   User   @relation(fields: [borrowerId], references: [id], onDelete: Restrict)
+
+  copyId String
+  copy   BookCopy @relation(fields: [copyId], references: [id], onDelete: Restrict)
+
+  @@index([borrowerId])
+  @@index([copyId])
+  @@index([returnedAt, dueAt]) // hot path: "find overdue active loans"
+}
+
+model Reservation {
+  id          String            @id @default(cuid())
+  createdAt   DateTime          @default(now())
+  status      ReservationStatus @default(PENDING)
+  fulfilledAt DateTime?
+  cancelledAt DateTime?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  bookId String
+  book   Book   @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  // Queue position derived from createdAt ordering within (bookId, PENDING).
+  @@index([bookId, status, createdAt])
+  @@index([userId])
+}
+
+// -----------------------------------------------------------------------------
+// Ratings — feed the recommender (chapter 10)
+// -----------------------------------------------------------------------------
+
+model Rating {
+  id        String   @id @default(cuid())
+  value     Int // 1..5; enforced in the API layer with Zod
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  bookId String
+  book   Book   @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, bookId]) // one rating per user per book
+  @@index([bookId]) // item-item CF reads ratings by book
+  @@index([userId])
+}
