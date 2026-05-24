@@ -8,6 +8,7 @@ import { StarRating } from '../../components/StarRating'
 import { getBook, listBooks } from '../../api/books'
 import { borrowBook } from '../../api/loans'
 import { deleteRating, rateBook } from '../../api/ratings'
+import { reserveBook } from '../../api/reservations'
 import { useAuth } from '../../lib/AuthProvider'
 
 export function BookDetailPage() {
@@ -36,6 +37,18 @@ export function BookDetailPage() {
     onError: (err) => setBorrowError(extractBorrowError(err)),
   })
 
+  const reserveMutation = useMutation({
+    mutationFn: () => reserveBook(id!),
+    onMutate: () => setBorrowError(null),
+    onSuccess: (reservation) => {
+      queryClient.invalidateQueries({ queryKey: ['me', 'reservations'] })
+      navigate('/my-loans', {
+        state: { reservedQueue: reservation.queuePosition },
+      })
+    },
+    onError: (err) => setBorrowError(extractReserveError(err)),
+  })
+
   const rateMutation = useMutation({
     mutationFn: (value: number) => rateBook(id!, value),
     onSuccess: () => {
@@ -59,6 +72,15 @@ export function BookDetailPage() {
       return
     }
     borrowMutation.mutate(id)
+  }
+
+  function onReserveClick() {
+    if (!id) return
+    if (auth.status !== 'authenticated') {
+      navigate('/login', { state: { from: location.pathname } })
+      return
+    }
+    reserveMutation.mutate()
   }
 
   function onRate(value: number) {
@@ -119,18 +141,23 @@ export function BookDetailPage() {
         <div className="flex flex-col items-center gap-4">
           <BookCover book={book} size="lg" />
           <div className="space-y-2 w-full">
-            <button
-              className="btn-primary w-full"
-              disabled={book.available === 0 || borrowMutation.isPending}
-              onClick={onBorrowClick}
-            >
-              {borrowMutation.isPending
-                ? 'Borrowing…'
-                : book.available > 0
-                ? 'Borrow this book'
-                : 'Place on hold'}
-            </button>
-            <button className="btn-secondary w-full">Add to wishlist</button>
+            {book.available > 0 ? (
+              <button
+                className="btn-primary w-full"
+                disabled={borrowMutation.isPending}
+                onClick={onBorrowClick}
+              >
+                {borrowMutation.isPending ? 'Borrowing…' : 'Borrow this book'}
+              </button>
+            ) : (
+              <button
+                className="btn-primary w-full"
+                disabled={reserveMutation.isPending}
+                onClick={onReserveClick}
+              >
+                {reserveMutation.isPending ? 'Placing hold…' : 'Place on hold'}
+              </button>
+            )}
             {borrowError && (
               <div className="text-xs text-coral-dark bg-coral/10 border border-coral/30 rounded-md px-3 py-2">
                 {borrowError}
@@ -267,4 +294,16 @@ function extractBorrowError(err: unknown): string {
     if (typeof message === 'string') return message
   }
   return 'Could not borrow this book. Please try again.'
+}
+
+function extractReserveError(err: unknown): string {
+  if (isAxiosError(err)) {
+    const code = err.response?.data?.error?.code
+    const message = err.response?.data?.error?.message
+    if (code === 'ALREADY_RESERVED') return 'You already have this book on hold.'
+    if (code === 'COPIES_AVAILABLE') return 'A copy is available — try borrowing.'
+    if (code === 'RESERVATION_LIMIT_REACHED') return 'You have too many active holds.'
+    if (typeof message === 'string') return message
+  }
+  return 'Could not place the hold. Please try again.'
 }

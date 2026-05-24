@@ -10,6 +10,7 @@ import {
 import { optionalAuth, requireAuth } from '../../middleware/auth.js'
 import { requireRole } from '../../middleware/rbac.js'
 import ratingsRouter from '../ratings/ratings.routes.js'
+import { bookReservationsRouter } from '../reservations/reservations.routes.js'
 
 const router = Router()
 
@@ -41,5 +42,7 @@ router.delete(
 
 // Nested ratings router — /:id/ratings
 router.use('/:bookId/ratings', ratingsRouter)
+// Nested reservations router — /:id/reservations (reader POST only)
+router.use('/:bookId/reservations', bookReservationsRouter)
 
 export default router

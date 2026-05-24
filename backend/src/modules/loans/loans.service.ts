@@ -1,6 +1,7 @@
 import { Prisma, type Loan } from '@prisma/client'
 import { prisma } from '../../lib/prisma.js'
 import { HttpError } from '../../utils/HttpError.js'
+import { fulfillNextInQueue } from '../reservations/reservations.service.js'
 import {
   FINE_PER_DAY,
   LOAN_PERIOD_DAYS,
@@ -67,7 +68,10 @@ export async function returnLoan(
   requesterId: string,
   requesterRole: 'READER' | 'LIBRARIAN',
 ) {
-  const loan = await prisma.loan.findUnique({ where: { id: loanId } })
+  const loan = await prisma.loan.findUnique({
+    where: { id: loanId },
+    include: { copy: { select: { bookId: true } } },
+  })
   if (!loan) throw new HttpError(404, 'NOT_FOUND', 'Loan not found')
   if (loan.borrowerId !== requesterId && requesterRole !== 'LIBRARIAN') {
     throw new HttpError(403, 'FORBIDDEN', 'You can only return your own loans')
@@ -86,6 +90,9 @@ export async function returnLoan(
       where: { id: loan.copyId },
       data: { status: 'AVAILABLE' },
     })
+    // Promote the head of the reservation queue, if any. Same transaction
+    // so the copy-available state and the FULFILLED reservation flip atomically.
+    await fulfillNextInQueue(tx, loan.copy.bookId)
     return updated
   })
 }

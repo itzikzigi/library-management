@@ -7,6 +7,11 @@ import {
   returnLoan,
   type Loan,
 } from '../../api/loans'
+import {
+  cancelReservation,
+  listMyReservations,
+  type Reservation,
+} from '../../api/reservations'
 
 export function MyLoansPage() {
   const queryClient = useQueryClient()
@@ -14,19 +19,30 @@ export function MyLoansPage() {
     queryKey: ['me', 'loans'],
     queryFn: () => listMyLoans('all'),
   })
+  const { data: reservations = [] } = useQuery({
+    queryKey: ['me', 'reservations'],
+    queryFn: () => listMyReservations('all'),
+  })
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['me', 'loans'] })
+    queryClient.invalidateQueries({ queryKey: ['me', 'reservations'] })
     queryClient.invalidateQueries({ queryKey: ['books'] })
     queryClient.invalidateQueries({ queryKey: ['book'] })
   }
 
   const renewMutation = useMutation({ mutationFn: renewLoan, onSuccess: invalidate })
   const returnMutation = useMutation({ mutationFn: returnLoan, onSuccess: invalidate })
+  const cancelHoldMutation = useMutation({
+    mutationFn: cancelReservation,
+    onSuccess: invalidate,
+  })
 
   const active = loans.filter((l) => l.status !== 'returned')
   const history = loans.filter((l) => l.status === 'returned')
   const totalFines = active.reduce((sum, l) => sum + l.fine, 0)
+  const activeHolds = reservations.filter((r) => r.status === 'PENDING')
+  const readyHolds = reservations.filter((r) => r.status === 'FULFILLED')
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8 space-y-8">
@@ -62,6 +78,36 @@ export function MyLoansPage() {
               onReturn={() => returnMutation.mutate(l.id)}
               renewBusy={renewMutation.isPending && renewMutation.variables === l.id}
               returnBusy={returnMutation.isPending && returnMutation.variables === l.id}
+            />
+          ))}
+        </Section>
+      )}
+
+      {readyHolds.length > 0 && (
+        <Section title={`Ready to pick up (${readyHolds.length})`}>
+          {readyHolds.map((r) => (
+            <HoldRow
+              key={r.id}
+              reservation={r}
+              onCancel={() => cancelHoldMutation.mutate(r.id)}
+              cancelBusy={
+                cancelHoldMutation.isPending && cancelHoldMutation.variables === r.id
+              }
+            />
+          ))}
+        </Section>
+      )}
+
+      {activeHolds.length > 0 && (
+        <Section title={`Active holds (${activeHolds.length})`}>
+          {activeHolds.map((r) => (
+            <HoldRow
+              key={r.id}
+              reservation={r}
+              onCancel={() => cancelHoldMutation.mutate(r.id)}
+              cancelBusy={
+                cancelHoldMutation.isPending && cancelHoldMutation.variables === r.id
+              }
             />
           ))}
         </Section>
@@ -199,4 +245,65 @@ function LoanRow({ loan, onRenew, onReturn, renewBusy, returnBusy }: RowProps) {
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-CA') // YYYY-MM-DD
+}
+
+function HoldRow({
+  reservation,
+  onCancel,
+  cancelBusy,
+}: {
+  reservation: Reservation
+  onCancel: () => void
+  cancelBusy?: boolean
+}) {
+  const isReady = reservation.status === 'FULFILLED'
+  const chip = isReady ? 'chip-success' : 'chip-accent'
+  const chipLabel = isReady ? 'ready' : 'on hold'
+  const detail = isReady
+    ? `Ready as of ${formatDate(reservation.fulfilledAt ?? reservation.createdAt)} — please visit the library`
+    : reservation.queuePosition !== null
+    ? `Queue position #${reservation.queuePosition} · placed ${formatDate(reservation.createdAt)}`
+    : `Placed ${formatDate(reservation.createdAt)}`
+
+  return (
+    <div className="flex items-center gap-4 p-4">
+      <Link to={`/book/${reservation.book.id}`}>
+        <BookCover
+          book={{
+            id: reservation.book.id,
+            title: reservation.book.title,
+            author: reservation.book.author,
+            language: reservation.book.language,
+          }}
+          size="sm"
+        />
+      </Link>
+      <div className="flex-1 min-w-0">
+        <Link
+          to={`/book/${reservation.book.id}`}
+          className="font-serif text-ink-900 hover:underline"
+        >
+          {reservation.book.title}
+        </Link>
+        <p className="text-xs text-ink-500">{reservation.book.author}</p>
+        <p className="text-xs text-ink-500 mt-1">{detail}</p>
+      </div>
+      <span className={chip}>{chipLabel}</span>
+      <div className="flex gap-2">
+        {isReady && (
+          <Link className="btn-primary" to={`/book/${reservation.book.id}`}>
+            Borrow now
+          </Link>
+        )}
+        <button
+          type="button"
+          className="btn-ghost"
+          onClick={onCancel}
+          disabled={cancelBusy}
+        >
+          {cancelBusy ? 'Cancelling…' : 'Cancel hold'}
+        </button>
+      </div>
+    </div>
+  )
 }

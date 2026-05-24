@@ -10,6 +10,10 @@ import authRouter from './modules/auth/auth.routes.js'
 import { loansRouter, myLoansRouter } from './modules/loans/loans.routes.js'
 import recommendationsRouter from './modules/recommendations/recommendations.routes.js'
 import membersRouter from './modules/members/members.routes.js'
+import {
+  myReservationsRouter,
+  reservationsRouter,
+} from './modules/reservations/reservations.routes.js'
 
 /**
  * Build the Express app. Exported as a factory so tests can spin up an
@@ -35,6 +39,8 @@ export function createApp() {
   app.use('/api/v1/me/loans', myLoansRouter)
   app.use('/api/v1/recommendations', recommendationsRouter)
   app.use('/api/v1/members', membersRouter)
+  app.use('/api/v1/reservations', reservationsRouter)
+  app.use('/api/v1/me/reservations', myReservationsRouter)
 
   // 404 for unknown routes
   app.use((_req, _res, next) => next(new HttpError(404, 'NOT_FOUND', 'Route not found')))
