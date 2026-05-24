@@ -47,3 +47,32 @@ export async function getBook(id: string): Promise<BookDetail> {
   const { data } = await api.get<{ data: BookDetail }>(`/books/${id}`)
   return data.data
 }
+
+export type CreateBookInput = {
+  title: string
+  authorName: string
+  isbn?: string
+  year?: number
+  language: Language
+  blurb?: string
+  shelfCode?: string
+  categories: string[]
+  tags: string[]
+  totalCopies: number
+}
+
+export type UpdateBookInput = Partial<Omit<CreateBookInput, 'totalCopies'>>
+
+export async function createBook(input: CreateBookInput): Promise<CatalogBook> {
+  const { data } = await api.post<{ data: CatalogBook }>('/books', input)
+  return data.data
+}
+
+export async function updateBook(id: string, input: UpdateBookInput): Promise<CatalogBook> {
+  const { data } = await api.patch<{ data: CatalogBook }>(`/books/${id}`, input)
+  return data.data
+}
+
+export async function deleteBook(id: string): Promise<void> {
+  await api.delete(`/books/${id}`)
+}

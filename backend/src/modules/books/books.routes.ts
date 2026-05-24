@@ -1,14 +1,43 @@
 import { Router } from 'express'
-import { list, getById } from './books.controller.js'
+import { create, getById, list, remove, update } from './books.controller.js'
 import { validate } from '../../middleware/validate.js'
-import { idParamsSchema, listQuerySchema } from './books.schema.js'
-import { optionalAuth } from '../../middleware/auth.js'
+import {
+  createBookBody,
+  idParamsSchema,
+  listQuerySchema,
+  updateBookBody,
+} from './books.schema.js'
+import { optionalAuth, requireAuth } from '../../middleware/auth.js'
+import { requireRole } from '../../middleware/rbac.js'
 import ratingsRouter from '../ratings/ratings.routes.js'
 
 const router = Router()
 
 router.get('/', validate({ query: listQuerySchema }), list)
 router.get('/:id', optionalAuth, validate({ params: idParamsSchema }), getById)
+
+// Librarian-only mutations.
+router.post(
+  '/',
+  requireAuth,
+  requireRole('LIBRARIAN'),
+  validate({ body: createBookBody }),
+  create,
+)
+router.patch(
+  '/:id',
+  requireAuth,
+  requireRole('LIBRARIAN'),
+  validate({ params: idParamsSchema, body: updateBookBody }),
+  update,
+)
+router.delete(
+  '/:id',
+  requireAuth,
+  requireRole('LIBRARIAN'),
+  validate({ params: idParamsSchema }),
+  remove,
+)
 
 // Nested ratings router — /:id/ratings
 router.use('/:bookId/ratings', ratingsRouter)

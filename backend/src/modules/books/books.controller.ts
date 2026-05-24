@@ -2,6 +2,8 @@ import type { Request, Response, NextFunction } from 'express'
 import { Prisma } from '@prisma/client'
 import { prisma } from '../../lib/prisma.js'
 import { HttpError } from '../../utils/HttpError.js'
+import * as svc from './books.service.js'
+import type { CreateBookBody, UpdateBookBody } from './books.schema.js'
 
 /**
  * GET /api/v1/books
@@ -106,6 +108,70 @@ export async function getById(req: Request, res: Response, next: NextFunction) {
         myRating,
       },
     })
+  } catch (err) {
+    next(err)
+  }
+}
+
+/**
+ * POST /api/v1/books
+ * Purpose: librarian creates a new title. Author / categories / tags are
+ * upserted by name so the caller doesn't need to know taxonomy IDs.
+ * Input: validated `createBookBody`
+ * Output: 201 { data: BookDTO }
+ */
+export async function create(req: Request, res: Response, next: NextFunction) {
+  try {
+    const book = await svc.createBook(req.body as CreateBookBody)
+    // Re-fetch through the read DTO path so the response shape matches GET.
+    const full = await prisma.book.findUnique({
+      where: { id: book.id },
+      include: {
+        author: true,
+        categories: true,
+        tags: true,
+        copies: { select: { status: true } },
+        ratings: { select: { value: true } },
+      },
+    })
+    res.status(201).json({ data: toBookDTO(full!) })
+  } catch (err) {
+    next(err)
+  }
+}
+
+/**
+ * PATCH /api/v1/books/:id
+ * Purpose: librarian edits a title's metadata (not copies).
+ */
+export async function update(req: Request, res: Response, next: NextFunction) {
+  try {
+    await svc.updateBook(req.params.id!, req.body as UpdateBookBody)
+    const full = await prisma.book.findUnique({
+      where: { id: req.params.id },
+      include: {
+        author: true,
+        categories: true,
+        tags: true,
+        copies: { select: { status: true } },
+        ratings: { select: { value: true } },
+      },
+    })
+    if (!full) throw new HttpError(404, 'NOT_FOUND', 'Book not found')
+    res.json({ data: toBookDTO(full) })
+  } catch (err) {
+    next(err)
+  }
+}
+
+/**
+ * DELETE /api/v1/books/:id
+ * Purpose: hard-delete a title when it has no loan history. 409 when it does.
+ */
+export async function remove(req: Request, res: Response, next: NextFunction) {
+  try {
+    await svc.deleteBook(req.params.id!)
+    res.status(204).send()
   } catch (err) {
     next(err)
   }
