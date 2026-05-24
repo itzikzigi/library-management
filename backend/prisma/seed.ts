@@ -231,13 +231,55 @@ const USERS = [
   },
 ]
 
-// (readerEmail, isbn, value) — seed ratings so the recommender has signal
+// (readerEmail, isbn, value) — seed ratings so the recommender has signal.
+// Designed so each non-trivial CF lookup for Yael produces a non-null score:
+// every candidate book she hasn't rated has at least one neighbor of one
+// of her rated books co-rated by another user. See ADR-0003.
 const RATINGS: Array<[string, string, number]> = [
-  ['yael@example.com', '978-0000000002', 5],
-  ['yael@example.com', '978-0000000006', 5],
-  ['yael@example.com', '978-0000000004', 4],
-  ['yael@example.com', '978-0000000005', 5],
-  ['yael@example.com', '978-0000000008', 4],
+  // Yael — speculative + memoir + tech, eclectic
+  ['yael@example.com', '978-0000000002', 5], // Name of the Wind
+  ['yael@example.com', '978-0000000006', 5], // Project Hail Mary
+  ['yael@example.com', '978-0000000004', 4], // Klara and the Sun
+  ['yael@example.com', '978-0000000005', 5], // סיפור על אהבה וחושך
+  ['yael@example.com', '978-0000000008', 4], // Pragmatic Programmer
+
+  // Daniel — speculative tilt, overlaps Yael on 2/4/6, adds 9/12
+  ['daniel.cohen@example.com', '978-0000000002', 5],
+  ['daniel.cohen@example.com', '978-0000000004', 4],
+  ['daniel.cohen@example.com', '978-0000000006', 5],
+  ['daniel.cohen@example.com', '978-0000000009', 5], // תולדות הזמן הקצר
+  ['daniel.cohen@example.com', '978-0000000012', 4], // A Little History of Philosophy
+
+  // Maya — Hebrew literature tilt, overlaps Yael on 5
+  ['maya.levi@example.com', '978-0000000001', 5], // מקום קטן ביקום
+  ['maya.levi@example.com', '978-0000000005', 5],
+  ['maya.levi@example.com', '978-0000000007', 5], // בלדות
+  ['maya.levi@example.com', '978-0000000011', 5], // יומן אנה פרנק
+  ['maya.levi@example.com', '978-0000000003', 3], // לאטור
+
+  // Eitan — memoir tilt, overlaps Yael on 4/5/8
+  ['eitan.bar@example.com', '978-0000000004', 3],
+  ['eitan.bar@example.com', '978-0000000005', 4],
+  ['eitan.bar@example.com', '978-0000000008', 4],
+  ['eitan.bar@example.com', '978-0000000010', 5], // Educated
+  ['eitan.bar@example.com', '978-0000000011', 5],
+
+  // Noa — fantasy/genre, overlaps Yael on 2/4/6
+  ['noa.adler@example.com', '978-0000000002', 5],
+  ['noa.adler@example.com', '978-0000000004', 3],
+  ['noa.adler@example.com', '978-0000000006', 4],
+
+  // Idan — tech/non-fiction, overlaps Yael on 8
+  ['idan.peretz@example.com', '978-0000000008', 5],
+  ['idan.peretz@example.com', '978-0000000010', 4],
+  ['idan.peretz@example.com', '978-0000000012', 5],
+  ['idan.peretz@example.com', '978-0000000003', 4],
+
+  // Tamar — Hebrew + science mix
+  ['tamar.hen@example.com', '978-0000000001', 4],
+  ['tamar.hen@example.com', '978-0000000007', 5],
+  ['tamar.hen@example.com', '978-0000000009', 4],
+  ['tamar.hen@example.com', '978-0000000011', 5],
 ]
 
 async function main() {

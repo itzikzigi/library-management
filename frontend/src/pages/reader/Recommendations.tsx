@@ -1,77 +1,78 @@
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { BookCard } from '../../components/BookCard'
-import { listBooks, type CatalogBook } from '../../api/books'
+import { useAuth } from '../../lib/AuthProvider'
+import {
+  getRecommendations,
+  type RecBook,
+  type RecSection,
+} from '../../api/recommendations'
 
 export function RecommendationsPage() {
-  const { data: books = [], isLoading } = useQuery({
-    queryKey: ['books', {}],
-    queryFn: () => listBooks({}),
+  const { user } = useAuth()
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['recommendations'],
+    queryFn: getRecommendations,
   })
 
-  // Placeholder slicing until the real recommender endpoint exists.
-  // The hybrid algorithm (chapter 10) will replace these with scored sets.
-  const becauseYouLiked = pickSlice(books, 0, 4)
-  const similarReaders = pickSlice(books, 3, 7)
-  const trending = pickSlice(books, 7, 10)
-  const hiddenGems = pickSlice(books, 9, 11)
+  const alpha = data?.profile.alpha ?? null
+  const ratingCount = data?.profile.ratingCount ?? 0
+  const sections = data?.sections ?? []
 
   return (
     <div className="mx-auto max-w-7xl px-6 py-8 space-y-12">
       <header className="space-y-2">
-        <span className="chip-accent">Personalized · updated daily</span>
-        <h1 className="text-3xl text-ink-900">For you, Yael</h1>
+        <span className="chip-accent">Personalized · hybrid algorithm</span>
+        <h1 className="text-3xl text-ink-900">
+          For you{user ? `, ${user.firstName}` : ''}
+        </h1>
         <p className="text-sm text-ink-500 max-w-2xl">
           A hybrid of content-based similarity and what readers with taste close to
           yours have rated highly. The blend shifts toward collaborative filtering as
           you accumulate ratings.
         </p>
-        <div className="flex gap-3 mt-3 text-xs text-ink-500">
-          <span>Profile: <strong className="text-ink-800">5 ratings</strong></span>
-          <span>α (content / collab): <strong className="text-ink-800">0.78 / 0.22</strong></span>
-          <span>Last refresh: <strong className="text-ink-800">today, 06:00</strong></span>
+        <div className="flex flex-wrap gap-3 mt-3 text-xs text-ink-500">
+          <span>
+            Profile:{' '}
+            <strong className="text-ink-800">
+              {ratingCount} rating{ratingCount === 1 ? '' : 's'}
+            </strong>
+          </span>
+          {alpha !== null && (
+            <span>
+              α (content / collab):{' '}
+              <strong className="text-ink-800">
+                {alpha.toFixed(2)} / {(1 - alpha).toFixed(2)}
+              </strong>
+            </span>
+          )}
+          <span>
+            Computed: <strong className="text-ink-800">on demand</strong>
+          </span>
         </div>
       </header>
 
       {isLoading && (
-        <div className="text-sm text-ink-500">Loading recommendations…</div>
+        <div className="text-sm text-ink-500">Computing recommendations…</div>
       )}
 
-      <Section
-        title="Because you liked The Name of the Wind"
-        subtitle="Content-based — similar categories, era, and tags."
-      >
-        {becauseYouLiked.map((b) => (
-          <BookCard key={b.id} book={b} />
-        ))}
-      </Section>
+      {error && (
+        <div className="card p-4 text-sm text-coral-700 bg-coral-50 border-coral-200">
+          Couldn't load recommendations. Try refreshing.
+        </div>
+      )}
 
-      <Section
-        title="Readers with taste like yours also enjoyed"
-        subtitle="Item-item collaborative filtering on the ratings matrix."
-      >
-        {similarReaders.map((b) => (
-          <BookCard key={b.id} book={b} />
-        ))}
-      </Section>
+      {!isLoading && !error && ratingCount === 0 && (
+        <div className="card p-5 text-sm text-ink-600 border-amber/40 bg-amber/10">
+          You haven't rated anything yet — rate a few books on their detail pages
+          and the personalized sections will appear. In the meantime, here's what's
+          trending at the library.
+        </div>
+      )}
 
-      <Section
-        title="Trending at your library this month"
-        subtitle="Popularity baseline — used as fallback for cold-start readers."
-      >
-        {trending.map((b) => (
-          <BookCard key={b.id} book={b} />
-        ))}
-      </Section>
-
-      <Section
-        title="Hidden gems for you"
-        subtitle="High signal from few raters who match your profile."
-      >
-        {hiddenGems.map((b) => (
-          <BookCard key={b.id} book={b} />
-        ))}
-      </Section>
+      {sections.map((section) => (
+        <Section key={section.key} section={section} />
+      ))}
 
       <aside
         className="rounded-xl p-8 text-parchment-50 relative overflow-hidden border border-ink-800"
@@ -100,28 +101,32 @@ export function RecommendationsPage() {
   )
 }
 
-function pickSlice(books: CatalogBook[], from: number, to: number) {
-  return books.slice(from, Math.min(to, books.length))
-}
-
-function Section({
-  title,
-  subtitle,
-  children,
-}: {
-  title: string
-  subtitle: string
-  children: React.ReactNode
-}) {
+function Section({ section }: { section: RecSection }) {
+  if (section.items.length === 0) return null
   return (
     <section>
       <div className="flex items-end justify-between mb-4">
         <div>
-          <h2 className="text-xl text-ink-900">{title}</h2>
-          <p className="text-xs text-ink-500">{subtitle}</p>
+          <h2 className="text-xl text-ink-900">{section.title}</h2>
+          <p className="text-xs text-ink-500">{section.subtitle}</p>
         </div>
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">{children}</div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+        {section.items.map((item) => (
+          <RecBookCard key={item.id} book={item} />
+        ))}
+      </div>
     </section>
+  )
+}
+
+function RecBookCard({ book }: { book: RecBook }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <BookCard book={book} />
+      {book.why && (
+        <p className="text-[11px] text-ink-500 leading-snug px-1">{book.why}</p>
+      )}
+    </div>
   )
 }
