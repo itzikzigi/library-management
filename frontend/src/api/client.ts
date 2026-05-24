@@ -1,5 +1,6 @@
 import axios, { type InternalAxiosRequestConfig } from 'axios'
 import { tokenStore } from './tokenStore'
+import { refreshAccessToken } from './refresh'
 
 const baseURL =
   (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:4000/api/v1'
@@ -18,7 +19,8 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 })
 
 // On 401: attempt one refresh, retry the original request once.
-// Skip refresh for /auth/* endpoints to avoid loops.
+// Skip refresh for /auth/* endpoints to avoid loops. The refresh call is
+// deduplicated so it can't race the AuthProvider's boot refresh.
 api.interceptors.response.use(
   (res) => res,
   async (err) => {
@@ -29,12 +31,8 @@ api.interceptors.response.use(
     if (status === 401 && original && !original._retry && !isAuthEndpoint) {
       original._retry = true
       try {
-        const { data } = await axios.post<{ accessToken: string }>(
-          `${baseURL}/auth/refresh`,
-          {},
-          { withCredentials: true },
-        )
-        tokenStore.set(data.accessToken)
+        const { accessToken } = await refreshAccessToken()
+        tokenStore.set(accessToken)
         return api(original)
       } catch {
         tokenStore.set(null)

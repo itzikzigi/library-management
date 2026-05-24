@@ -1,4 +1,5 @@
 import { api } from './client'
+import { refreshAccessToken } from './refresh'
 
 export type Role = 'READER' | 'LIBRARIAN'
 
@@ -33,8 +34,7 @@ export async function register(input: RegisterInput): Promise<AuthResponse> {
 }
 
 export async function refreshSession(): Promise<RefreshResponse> {
-  const { data } = await api.post<RefreshResponse>('/auth/refresh', {})
-  return data
+  return refreshAccessToken()
 }
 
 export async function logout(): Promise<void> {
