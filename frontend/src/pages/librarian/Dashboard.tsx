@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
-import { findBook } from '../../mock/books'
+import { useQuery } from '@tanstack/react-query'
 import { BookCover } from '../../components/BookCover'
+import { listLoans, type Loan } from '../../api/loans'
 
 type Stat = {
   label: string
@@ -12,66 +13,34 @@ type Stat = {
   scheme: 'emerald' | 'coral' | 'berry' | 'amber'
 }
 
-const STATS: Stat[] = [
-  {
-    label: 'Active loans',
-    value: 142,
-    delta: '+8 this week',
-    trend: 'up',
-    spark: [22, 28, 24, 31, 29, 36, 34, 38, 36, 42, 40, 46],
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="currentColor" strokeWidth="2">
-        <path d="M4 19V6a2 2 0 0 1 2-2h8l4 4v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z" />
-        <path d="M14 4v4h4" />
-      </svg>
-    ),
-    scheme: 'emerald',
-  },
-  {
-    label: 'Overdue',
-    value: 11,
-    delta: '−2 since Mon',
-    trend: 'down',
-    spark: [18, 17, 16, 15, 14, 14, 13, 13, 12, 12, 12, 11],
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="currentColor" strokeWidth="2">
-        <circle cx="12" cy="12" r="9" />
-        <path d="M12 7v5l3 2" />
-      </svg>
-    ),
-    scheme: 'coral',
-  },
-  {
-    label: 'Members',
-    value: 318,
-    delta: '+5 this month',
-    trend: 'up',
-    spark: [280, 285, 290, 295, 300, 302, 305, 308, 310, 313, 316, 318],
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="currentColor" strokeWidth="2">
-        <circle cx="9" cy="8" r="3.5" />
-        <path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6" />
-        <circle cx="17" cy="9" r="2.5" />
-        <path d="M15 20c0-2.8 2.2-5 4-5" />
-      </svg>
-    ),
-    scheme: 'berry',
-  },
-  {
-    label: 'Books in catalog',
-    value: 1287,
-    delta: '+12 new',
-    trend: 'up',
-    spark: [1240, 1245, 1252, 1258, 1263, 1268, 1272, 1275, 1278, 1281, 1284, 1287],
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="currentColor" strokeWidth="2">
-        <path d="M4 5a2 2 0 0 1 2-2h11v18H6a2 2 0 0 1-2-2V5Z" />
-        <path d="M17 3v18M8 7h6M8 11h6" />
-      </svg>
-    ),
-    scheme: 'amber',
-  },
-]
+const ICONS = {
+  loans: (
+    <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="currentColor" strokeWidth="2">
+      <path d="M4 19V6a2 2 0 0 1 2-2h8l4 4v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z" />
+      <path d="M14 4v4h4" />
+    </svg>
+  ),
+  overdue: (
+    <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </svg>
+  ),
+  members: (
+    <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="currentColor" strokeWidth="2">
+      <circle cx="9" cy="8" r="3.5" />
+      <path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6" />
+      <circle cx="17" cy="9" r="2.5" />
+      <path d="M15 20c0-2.8 2.2-5 4-5" />
+    </svg>
+  ),
+  books: (
+    <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="currentColor" strokeWidth="2">
+      <path d="M4 5a2 2 0 0 1 2-2h11v18H6a2 2 0 0 1-2-2V5Z" />
+      <path d="M17 3v18M8 7h6M8 11h6" />
+    </svg>
+  ),
+}
 
 const SCHEMES = {
   emerald: {
@@ -96,27 +65,11 @@ const SCHEMES = {
   },
 }
 
-const RECENT = [
-  { who: 'Yael Shalev', what: 'borrowed', action: 'borrow', book: 'b-002', when: '2 min ago' },
-  { who: 'Daniel Cohen', what: 'returned', action: 'return', book: 'b-005', when: '14 min ago' },
-  { who: 'Maya Levi', what: 'reserved', action: 'reserve', book: 'b-006', when: '32 min ago' },
-  { who: 'Eitan Bar', what: 'rated 5★', action: 'rate', book: 'b-011', when: '1 hr ago' },
-  { who: 'Noa Adler', what: 'returned (late)', action: 'late', book: 'b-008', when: '2 hr ago' },
-]
-
 const ACTION_STYLE: Record<string, { bg: string; color: string; dot: string }> = {
   borrow: { bg: 'rgba(31, 154, 114, 0.15)', color: '#0e604a', dot: '#1f9a72' },
   return: { bg: 'rgba(56, 189, 248, 0.18)', color: '#075985', dot: '#0ea5e9' },
-  reserve: { bg: 'rgba(240, 168, 48, 0.2)', color: '#b96a05', dot: '#f0a830' },
-  rate: { bg: 'rgba(214, 51, 108, 0.15)', color: '#a01650', dot: '#d6336c' },
   late: { bg: 'rgba(239, 83, 80, 0.18)', color: '#b71c1c', dot: '#ef5350' },
 }
-
-const OVERDUE = [
-  { bookId: 'b-008', member: 'Noa Adler', days: 8, fine: 16 },
-  { bookId: 'b-002', member: 'Idan Peretz', days: 5, fine: 10 },
-  { bookId: 'b-006', member: 'Tamar Hen', days: 3, fine: 6 },
-]
 
 const CATEGORIES = [
   { label: 'Fiction', pct: 32, color: '#1f9a72' },
@@ -134,6 +87,63 @@ export function LibrarianDashboard() {
     day: 'numeric',
     year: 'numeric',
   })
+
+  const activeQuery = useQuery({
+    queryKey: ['loans', { status: 'active', sort: 'recent', limit: 100 }],
+    queryFn: () => listLoans({ status: 'active', limit: 100, sort: 'recent' }),
+  })
+  const overdueQuery = useQuery({
+    queryKey: ['loans', { status: 'overdue', sort: 'due-soonest', limit: 10 }],
+    queryFn: () => listLoans({ status: 'overdue', limit: 10, sort: 'due-soonest' }),
+  })
+  const recentQuery = useQuery({
+    queryKey: ['loans', { status: 'all', sort: 'recent', limit: 10 }],
+    queryFn: () => listLoans({ status: 'all', limit: 10, sort: 'recent' }),
+  })
+
+  const activeLoans = activeQuery.data ?? []
+  const overdue = overdueQuery.data ?? []
+  const overdueTotalFines = overdue.reduce((s, l) => s + l.fine, 0)
+  const recent = recentQuery.data ?? []
+
+  const stats: Stat[] = [
+    {
+      label: 'Active loans',
+      value: activeLoans.length,
+      delta: `${overdue.length} overdue`,
+      trend: 'up',
+      spark: spreadSpark(activeLoans.length, 12),
+      icon: ICONS.loans,
+      scheme: 'emerald',
+    },
+    {
+      label: 'Overdue',
+      value: overdue.length,
+      delta: `₪${overdueTotalFines.toFixed(0)} in fines`,
+      trend: 'down',
+      spark: spreadSpark(overdue.length, 12),
+      icon: ICONS.overdue,
+      scheme: 'coral',
+    },
+    {
+      label: 'Members',
+      value: 8,
+      delta: 'seeded today',
+      trend: 'up',
+      spark: [2, 3, 4, 5, 5, 6, 6, 7, 7, 8, 8, 8],
+      icon: ICONS.members,
+      scheme: 'berry',
+    },
+    {
+      label: 'Books in catalog',
+      value: 12,
+      delta: '34 copies',
+      trend: 'up',
+      spark: [2, 4, 6, 7, 8, 9, 10, 10, 11, 11, 12, 12],
+      icon: ICONS.books,
+      scheme: 'amber',
+    },
+  ]
 
   return (
     <div className="mx-auto max-w-7xl px-6 py-8 space-y-8">
@@ -169,7 +179,7 @@ export function LibrarianDashboard() {
       </header>
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {STATS.map((s) => {
+        {stats.map((s) => {
           const scheme = SCHEMES[s.scheme]
           return (
             <div
@@ -259,19 +269,33 @@ export function LibrarianDashboard() {
             <span className="chip-success">live</span>
           </div>
           <ul className="space-y-3">
-            {RECENT.map((r, i) => {
-              const book = findBook(r.book)
-              const style = ACTION_STYLE[r.action]
+            {recent.length === 0 && (
+              <li className="text-sm text-ink-400 py-4">No recent activity.</li>
+            )}
+            {recent.map((l) => {
+              const action: keyof typeof ACTION_STYLE = l.returnedAt
+                ? l.status === 'overdue'
+                  ? 'late'
+                  : 'return'
+                : 'borrow'
+              const verb = l.returnedAt
+                ? l.status === 'overdue' ? 'returned late' : 'returned'
+                : 'borrowed'
+              const when = relativeTime(l.returnedAt ?? l.borrowedAt)
+              const who = l.borrower
+                ? `${l.borrower.firstName} ${l.borrower.lastName}`
+                : 'Someone'
+              const style = ACTION_STYLE[action]!
               return (
                 <li
-                  key={i}
+                  key={l.id}
                   className="flex items-center gap-3 p-3 -mx-3 rounded-lg hover:bg-parchment-50 transition-colors"
                 >
                   <div
                     className="h-10 w-10 rounded-xl grid place-items-center text-xs font-semibold flex-shrink-0 relative"
                     style={{ background: style.bg, color: style.color }}
                   >
-                    {r.who.split(' ').map((s) => s[0]).join('')}
+                    {who.split(' ').map((s) => s[0]).join('').slice(0, 2)}
                     <span
                       className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white"
                       style={{ background: style.dot }}
@@ -279,17 +303,17 @@ export function LibrarianDashboard() {
                   </div>
                   <div className="flex-1 text-sm min-w-0">
                     <div className="text-ink-900">
-                      <span className="font-medium">{r.who}</span>{' '}
-                      <span style={{ color: style.color }}>{r.what}</span>
+                      <span className="font-medium">{who}</span>{' '}
+                      <span style={{ color: style.color }}>{verb}</span>
                     </div>
                     <Link
-                      to={`/book/${r.book}`}
+                      to={`/book/${l.book.id}`}
                       className="text-xs text-ink-500 hover:text-ink-800 truncate block"
                     >
-                      {book?.title}
+                      {l.book.title}
                     </Link>
                   </div>
-                  <span className="text-xs text-ink-400 flex-shrink-0">{r.when}</span>
+                  <span className="text-xs text-ink-400 flex-shrink-0">{when}</span>
                 </li>
               )
             })}
@@ -310,36 +334,48 @@ export function LibrarianDashboard() {
             </Link>
           </div>
           <ul className="space-y-3">
-            {OVERDUE.map((o) => {
-              const book = findBook(o.bookId)
-              if (!book) return null
-              const intensity = o.days >= 7 ? 'high' : o.days >= 4 ? 'mid' : 'low'
+            {overdue.length === 0 && (
+              <li className="py-4 text-center text-sm text-ink-400">No overdue loans 🎉</li>
+            )}
+            {overdue.map((l: Loan) => {
+              const intensity = l.daysOverdue >= 7 ? 'high' : l.daysOverdue >= 4 ? 'mid' : 'low'
               const intensityStyle = {
                 high: { bg: 'linear-gradient(135deg, #ef5350, #b71c1c)', text: '#fff' },
                 mid: { bg: 'linear-gradient(135deg, #f0a830, #b96a05)', text: '#fff' },
                 low: { bg: 'rgba(240, 168, 48, 0.2)', text: '#b96a05' },
               }[intensity]
+              const who = l.borrower
+                ? `${l.borrower.firstName} ${l.borrower.lastName}`
+                : 'Member'
               return (
                 <li
-                  key={o.bookId}
+                  key={l.id}
                   className="flex items-center gap-3 p-3 -mx-3 rounded-lg hover:bg-parchment-50 transition-colors"
                 >
                   <div className="relative">
-                    <BookCover book={book} size="sm" />
+                    <BookCover
+                      book={{
+                        id: l.book.id,
+                        title: l.book.title,
+                        author: l.book.author,
+                        language: l.book.language,
+                      }}
+                      size="sm"
+                    />
                     <span
                       className="absolute -top-2 -right-2 text-[10px] font-bold px-2 py-0.5 rounded-full"
                       style={{ background: intensityStyle.bg, color: intensityStyle.text }}
                     >
-                      {o.days}d
+                      {l.daysOverdue}d
                     </span>
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="font-serif text-sm text-ink-900 truncate">
-                      {book.title}
+                      {l.book.title}
                     </div>
-                    <div className="text-xs text-ink-500 mt-0.5">{o.member}</div>
+                    <div className="text-xs text-ink-500 mt-0.5">{who}</div>
                     <div className="text-xs text-coral-dark font-medium mt-1">
-                      ₪{o.fine} accrued
+                      ₪{l.fine} accrued
                     </div>
                   </div>
                   <button className="btn-ghost text-xs">Remind</button>
@@ -372,6 +408,26 @@ function Sparkline({ values, stroke }: { values: number[]; stroke: string }) {
       <path d={path} fill="none" stroke={stroke} strokeWidth="2" strokeLinejoin="round" />
     </svg>
   )
+}
+
+function spreadSpark(latest: number, length: number): number[] {
+  // Build a gentle climb from 0 to `latest` so the sparkline isn't flat
+  // until we wire real time-series data.
+  return Array.from({ length }, (_, i) =>
+    Math.max(0, Math.round((latest * (i + 1)) / length)),
+  )
+}
+
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  const minutes = Math.floor(diff / 60_000)
+  if (minutes < 1) return 'just now'
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `${days}d ago`
+  return new Date(iso).toLocaleDateString('en-CA')
 }
 
 function GradientBarChart() {

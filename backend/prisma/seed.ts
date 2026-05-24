@@ -187,6 +187,48 @@ const USERS = [
     role: 'READER' as const,
     password: 'reader123',
   },
+  {
+    email: 'daniel.cohen@example.com',
+    firstName: 'Daniel',
+    lastName: 'Cohen',
+    role: 'READER' as const,
+    password: 'reader123',
+  },
+  {
+    email: 'maya.levi@example.com',
+    firstName: 'Maya',
+    lastName: 'Levi',
+    role: 'READER' as const,
+    password: 'reader123',
+  },
+  {
+    email: 'eitan.bar@example.com',
+    firstName: 'Eitan',
+    lastName: 'Bar',
+    role: 'READER' as const,
+    password: 'reader123',
+  },
+  {
+    email: 'noa.adler@example.com',
+    firstName: 'Noa',
+    lastName: 'Adler',
+    role: 'READER' as const,
+    password: 'reader123',
+  },
+  {
+    email: 'idan.peretz@example.com',
+    firstName: 'Idan',
+    lastName: 'Peretz',
+    role: 'READER' as const,
+    password: 'reader123',
+  },
+  {
+    email: 'tamar.hen@example.com',
+    firstName: 'Tamar',
+    lastName: 'Hen',
+    role: 'READER' as const,
+    password: 'reader123',
+  },
 ]
 
 // (readerEmail, isbn, value) — seed ratings so the recommender has signal
@@ -291,6 +333,9 @@ async function main() {
     })
   }
 
+  console.log('— Seeding loans…')
+  await seedLoans()
+
   const counts = {
     users: await prisma.user.count(),
     books: await prisma.book.count(),
@@ -299,8 +344,101 @@ async function main() {
     categories: await prisma.category.count(),
     tags: await prisma.tag.count(),
     ratings: await prisma.rating.count(),
+    loans: await prisma.loan.count(),
   }
   console.log('— Done.', counts)
+}
+
+/**
+ * Seeds a realistic spread of loans:
+ *   - Yael: one on-loan (recent), one overdue, one returned
+ *   - Noa, Idan, Tamar: overdue (for the dashboard's overdue list)
+ *   - Daniel, Maya, Eitan: one active each
+ * Idempotent guard: if any loans already exist, do nothing.
+ */
+async function seedLoans() {
+  const existing = await prisma.loan.count()
+  if (existing > 0) {
+    console.log(`  (${existing} loans already exist — skipping)`)
+    return
+  }
+
+  const spec: Array<{
+    email: string
+    isbn: string
+    borrowedDaysAgo: number
+    dueInDays: number
+    returned: boolean
+  }> = [
+    // Yael — three loans across statuses
+    { email: 'yael@example.com', isbn: '978-0000000002', borrowedDaysAgo: 7, dueInDays: 14, returned: false },
+    { email: 'yael@example.com', isbn: '978-0000000008', borrowedDaysAgo: 30, dueInDays: -9, returned: false },
+    { email: 'yael@example.com', isbn: '978-0000000005', borrowedDaysAgo: 90, dueInDays: -69, returned: true },
+
+    // Dashboard's overdue trio
+    { email: 'noa.adler@example.com', isbn: '978-0000000008', borrowedDaysAgo: 29, dueInDays: -8, returned: false },
+    { email: 'idan.peretz@example.com', isbn: '978-0000000004', borrowedDaysAgo: 26, dueInDays: -5, returned: false },
+    { email: 'tamar.hen@example.com', isbn: '978-0000000006', borrowedDaysAgo: 24, dueInDays: -3, returned: false },
+
+    // Active loans across other members
+    { email: 'daniel.cohen@example.com', isbn: '978-0000000011', borrowedDaysAgo: 3, dueInDays: 18, returned: false },
+    { email: 'maya.levi@example.com', isbn: '978-0000000010', borrowedDaysAgo: 1, dueInDays: 20, returned: false },
+    { email: 'eitan.bar@example.com', isbn: '978-0000000007', borrowedDaysAgo: 5, dueInDays: 16, returned: false },
+
+    // Some recent history
+    { email: 'daniel.cohen@example.com', isbn: '978-0000000005', borrowedDaysAgo: 40, dueInDays: -19, returned: true },
+    { email: 'maya.levi@example.com', isbn: '978-0000000001', borrowedDaysAgo: 60, dueInDays: -39, returned: true },
+  ]
+
+  for (const s of spec) {
+    const user = await prisma.user.findUnique({ where: { email: s.email } })
+    const book = await prisma.book.findUnique({ where: { isbn: s.isbn } })
+    if (!user || !book) continue
+
+    // Claim an AVAILABLE copy.
+    const copy = await prisma.bookCopy.findFirst({
+      where: { bookId: book.id, status: 'AVAILABLE' },
+      orderBy: { acquiredAt: 'asc' },
+    })
+    if (!copy) {
+      console.log(`  (no available copy for ${book.title} — skipping ${s.email})`)
+      continue
+    }
+
+    const borrowedAt = daysAgo(s.borrowedDaysAgo)
+    const dueAt = daysFromNow(s.dueInDays)
+    const returnedAt = s.returned
+      ? daysAgo(Math.max(0, s.borrowedDaysAgo - 7))
+      : null
+
+    await prisma.$transaction(async (tx) => {
+      await tx.loan.create({
+        data: {
+          borrowerId: user.id,
+          copyId: copy.id,
+          borrowedAt,
+          dueAt,
+          returnedAt,
+        },
+      })
+      await tx.bookCopy.update({
+        where: { id: copy.id },
+        data: { status: s.returned ? 'AVAILABLE' : 'ON_LOAN' },
+      })
+    })
+  }
+}
+
+function daysAgo(n: number): Date {
+  const d = new Date()
+  d.setDate(d.getDate() - n)
+  return d
+}
+
+function daysFromNow(n: number): Date {
+  const d = new Date()
+  d.setDate(d.getDate() + n)
+  return d
 }
 
 function slugify(s: string): string {

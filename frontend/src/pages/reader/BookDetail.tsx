@@ -1,20 +1,49 @@
 import { useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { isAxiosError } from 'axios'
 import { BookCover } from '../../components/BookCover'
 import { BookCard } from '../../components/BookCard'
 import { StarRating } from '../../components/StarRating'
 import { getBook, listBooks } from '../../api/books'
+import { borrowBook } from '../../api/loans'
+import { useAuth } from '../../lib/AuthProvider'
 
 export function BookDetailPage() {
   const { id } = useParams<{ id: string }>()
   const [userRating, setUserRating] = useState(0)
+  const [borrowError, setBorrowError] = useState<string | null>(null)
+  const auth = useAuth()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const queryClient = useQueryClient()
 
   const bookQuery = useQuery({
     queryKey: ['book', id],
     queryFn: () => getBook(id!),
     enabled: !!id,
   })
+
+  const borrowMutation = useMutation({
+    mutationFn: borrowBook,
+    onMutate: () => setBorrowError(null),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['book', id] })
+      queryClient.invalidateQueries({ queryKey: ['books'] })
+      queryClient.invalidateQueries({ queryKey: ['me', 'loans'] })
+      navigate('/my-loans')
+    },
+    onError: (err) => setBorrowError(extractBorrowError(err)),
+  })
+
+  function onBorrowClick() {
+    if (!id) return
+    if (auth.status !== 'authenticated') {
+      navigate('/login', { state: { from: location.pathname } })
+      return
+    }
+    borrowMutation.mutate(id)
+  }
   const allBooksQuery = useQuery({
     queryKey: ['books', {}],
     queryFn: () => listBooks({}),
@@ -65,10 +94,23 @@ export function BookDetailPage() {
         <div className="flex flex-col items-center gap-4">
           <BookCover book={book} size="lg" />
           <div className="space-y-2 w-full">
-            <button className="btn-primary w-full" disabled={book.available === 0}>
-              {book.available > 0 ? 'Borrow this book' : 'Place on hold'}
+            <button
+              className="btn-primary w-full"
+              disabled={book.available === 0 || borrowMutation.isPending}
+              onClick={onBorrowClick}
+            >
+              {borrowMutation.isPending
+                ? 'Borrowing…'
+                : book.available > 0
+                ? 'Borrow this book'
+                : 'Place on hold'}
             </button>
             <button className="btn-secondary w-full">Add to wishlist</button>
+            {borrowError && (
+              <div className="text-xs text-coral-dark bg-coral/10 border border-coral/30 rounded-md px-3 py-2">
+                {borrowError}
+              </div>
+            )}
           </div>
         </div>
 
@@ -145,6 +187,7 @@ export function BookDetailPage() {
         </div>
       </div>
 
+      {/* similar books below */}
       {similar.length > 0 && (
         <section className="mt-12">
           <div className="flex items-end justify-between mb-4">
@@ -167,4 +210,16 @@ export function BookDetailPage() {
       )}
     </div>
   )
+}
+
+function extractBorrowError(err: unknown): string {
+  if (isAxiosError(err)) {
+    const code = err.response?.data?.error?.code
+    const message = err.response?.data?.error?.message
+    if (code === 'NO_COPY_AVAILABLE') return 'No copies are available right now.'
+    if (code === 'LOAN_LIMIT_REACHED') return 'You already have the maximum active loans.'
+    if (code === 'UNAUTHORIZED') return 'Please sign in to borrow.'
+    if (typeof message === 'string') return message
+  }
+  return 'Could not borrow this book. Please try again.'
 }

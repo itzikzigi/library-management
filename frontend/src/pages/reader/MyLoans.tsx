@@ -1,67 +1,86 @@
 import { Link } from 'react-router-dom'
-import { findBook } from '../../mock/books'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { BookCover } from '../../components/BookCover'
-
-type Loan = {
-  bookId: string
-  borrowed: string
-  due: string
-  status: 'on-loan' | 'overdue' | 'returned' | 'reserved'
-  renewable?: boolean
-}
-
-const CURRENT: Loan[] = [
-  { bookId: 'b-002', borrowed: '2026-05-10', due: '2026-05-31', status: 'on-loan', renewable: true },
-  { bookId: 'b-008', borrowed: '2026-04-25', due: '2026-05-16', status: 'overdue' },
-]
-const RESERVED: Loan[] = [
-  { bookId: 'b-006', borrowed: '—', due: 'queue #2', status: 'reserved' },
-]
-const HISTORY: Loan[] = [
-  { bookId: 'b-005', borrowed: '2026-03-02', due: '2026-03-23', status: 'returned' },
-  { bookId: 'b-010', borrowed: '2026-02-01', due: '2026-02-22', status: 'returned' },
-  { bookId: 'b-001', borrowed: '2025-12-14', due: '2026-01-04', status: 'returned' },
-]
-
-const FINE = 4.5
+import {
+  listMyLoans,
+  renewLoan,
+  returnLoan,
+  type Loan,
+} from '../../api/loans'
 
 export function MyLoansPage() {
+  const queryClient = useQueryClient()
+  const { data: loans = [], isLoading, isError } = useQuery({
+    queryKey: ['me', 'loans'],
+    queryFn: () => listMyLoans('all'),
+  })
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['me', 'loans'] })
+    queryClient.invalidateQueries({ queryKey: ['books'] })
+    queryClient.invalidateQueries({ queryKey: ['book'] })
+  }
+
+  const renewMutation = useMutation({ mutationFn: renewLoan, onSuccess: invalidate })
+  const returnMutation = useMutation({ mutationFn: returnLoan, onSuccess: invalidate })
+
+  const active = loans.filter((l) => l.status !== 'returned')
+  const history = loans.filter((l) => l.status === 'returned')
+  const totalFines = active.reduce((sum, l) => sum + l.fine, 0)
+
   return (
     <div className="mx-auto max-w-6xl px-6 py-8 space-y-8">
       <header>
         <h1 className="text-3xl text-ink-900">My loans</h1>
         <p className="text-sm text-ink-500 mt-1">
-          Current borrows, reservations, and your borrowing history.
+          Current borrows and your full borrowing history.
         </p>
       </header>
 
       <div className="grid sm:grid-cols-3 gap-4">
-        <Stat label="On loan" value={CURRENT.length} />
-        <Stat label="Reserved" value={RESERVED.length} />
+        <Stat label="On loan" value={active.filter((l) => l.status === 'on-loan').length} />
+        <Stat label="Overdue" value={active.filter((l) => l.status === 'overdue').length} tone={active.some((l) => l.status === 'overdue') ? 'warn' : 'neutral'} />
         <Stat
           label="Outstanding fines"
-          value={`₪${FINE.toFixed(2)}`}
-          tone={FINE > 0 ? 'warn' : 'neutral'}
+          value={`₪${totalFines.toFixed(2)}`}
+          tone={totalFines > 0 ? 'warn' : 'neutral'}
         />
       </div>
 
-      <Section title={`Currently borrowed (${CURRENT.length})`}>
-        {CURRENT.map((l) => (
-          <LoanRow key={l.bookId} loan={l} />
-        ))}
-      </Section>
+      {isLoading && <div className="text-sm text-ink-500">Loading…</div>}
+      {isError && (
+        <div className="card p-6 text-sm text-coral-dark">Couldn't load your loans.</div>
+      )}
 
-      <Section title={`Reservations (${RESERVED.length})`}>
-        {RESERVED.map((l) => (
-          <LoanRow key={l.bookId} loan={l} />
-        ))}
-      </Section>
+      {active.length > 0 && (
+        <Section title={`Currently borrowed (${active.length})`}>
+          {active.map((l) => (
+            <LoanRow
+              key={l.id}
+              loan={l}
+              onRenew={() => renewMutation.mutate(l.id)}
+              onReturn={() => returnMutation.mutate(l.id)}
+              renewBusy={renewMutation.isPending && renewMutation.variables === l.id}
+              returnBusy={returnMutation.isPending && returnMutation.variables === l.id}
+            />
+          ))}
+        </Section>
+      )}
 
-      <Section title={`History (${HISTORY.length})`} muted>
-        {HISTORY.map((l) => (
-          <LoanRow key={l.bookId + l.borrowed} loan={l} />
-        ))}
-      </Section>
+      {history.length > 0 && (
+        <Section title={`History (${history.length})`} muted>
+          {history.map((l) => (
+            <LoanRow key={l.id} loan={l} />
+          ))}
+        </Section>
+      )}
+
+      {!isLoading && loans.length === 0 && (
+        <div className="card p-8 text-center text-sm text-ink-500">
+          No loans yet.{' '}
+          <Link to="/" className="text-ink-800 underline">Browse the catalog</Link> to get started.
+        </div>
+      )}
     </div>
   )
 }
@@ -102,41 +121,82 @@ function Stat({
   )
 }
 
-function LoanRow({ loan }: { loan: Loan }) {
-  const book = findBook(loan.bookId)
-  if (!book) return null
+type RowProps = {
+  loan: Loan
+  onRenew?: () => void
+  onReturn?: () => void
+  renewBusy?: boolean
+  returnBusy?: boolean
+}
+
+function LoanRow({ loan, onRenew, onReturn, renewBusy, returnBusy }: RowProps) {
   const statusChip =
     loan.status === 'overdue'
       ? 'chip-danger'
       : loan.status === 'on-loan'
       ? 'chip-success'
-      : loan.status === 'reserved'
-      ? 'chip-warn'
       : 'chip'
+
+  const dueText =
+    loan.status === 'returned'
+      ? `Returned ${formatDate(loan.returnedAt!)}`
+      : loan.status === 'overdue'
+      ? `${loan.daysOverdue} days overdue · ₪${loan.fine} fine`
+      : `${loan.daysUntilDue} days remaining`
+
   return (
     <div className="flex items-center gap-4 p-4">
-      <Link to={`/book/${book.id}`}>
-        <BookCover book={book} size="sm" />
+      <Link to={`/book/${loan.book.id}`}>
+        <BookCover
+          book={{
+            id: loan.book.id,
+            title: loan.book.title,
+            author: loan.book.author,
+            language: loan.book.language,
+          }}
+          size="sm"
+        />
       </Link>
       <div className="flex-1 min-w-0">
-        <Link to={`/book/${book.id}`} className="font-serif text-ink-900 hover:underline">
-          {book.title}
+        <Link
+          to={`/book/${loan.book.id}`}
+          className="font-serif text-ink-900 hover:underline"
+        >
+          {loan.book.title}
         </Link>
-        <p className="text-xs text-ink-500">{book.author}</p>
+        <p className="text-xs text-ink-500">{loan.book.author}</p>
         <p className="text-xs text-ink-500 mt-1">
-          Borrowed {loan.borrowed} · Due {loan.due}
+          Borrowed {formatDate(loan.borrowedAt)} · Due {formatDate(loan.dueAt)} ·{' '}
+          {dueText}
         </p>
       </div>
       <span className={statusChip}>{loan.status.replace('-', ' ')}</span>
       <div className="flex gap-2">
-        {loan.status === 'on-loan' && loan.renewable && (
-          <button className="btn-secondary">Renew</button>
+        {loan.canRenew && onRenew && (
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={onRenew}
+            disabled={renewBusy}
+          >
+            {renewBusy ? 'Renewing…' : `Renew (${loan.renewals}/2)`}
+          </button>
         )}
-        {loan.status === 'on-loan' && <button className="btn-ghost">Return</button>}
-        {loan.status === 'overdue' && <button className="btn-primary">Return now</button>}
-        {loan.status === 'reserved' && <button className="btn-ghost">Cancel</button>}
-        {loan.status === 'returned' && <button className="btn-ghost">Rate</button>}
+        {loan.status !== 'returned' && onReturn && (
+          <button
+            type="button"
+            className={loan.status === 'overdue' ? 'btn-primary' : 'btn-ghost'}
+            onClick={onReturn}
+            disabled={returnBusy}
+          >
+            {returnBusy ? 'Returning…' : 'Return'}
+          </button>
+        )}
       </div>
     </div>
   )
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-CA') // YYYY-MM-DD
 }

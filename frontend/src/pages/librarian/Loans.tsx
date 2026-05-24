@@ -1,107 +1,187 @@
-import { findBook } from '../../mock/books'
+import { useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { BookCover } from '../../components/BookCover'
+import {
+  listLoans,
+  returnLoan,
+  type LibrarianLoansStatus,
+  type Loan,
+} from '../../api/loans'
 
-type LoanRow = {
-  id: string
-  bookId: string
-  member: string
-  borrowed: string
-  due: string
-  status: 'on-loan' | 'overdue' | 'returned'
-}
-
-const LOANS: LoanRow[] = [
-  { id: 'l-101', bookId: 'b-002', member: 'Yael Shalev', borrowed: '2026-05-10', due: '2026-05-31', status: 'on-loan' },
-  { id: 'l-102', bookId: 'b-008', member: 'Noa Adler', borrowed: '2026-04-25', due: '2026-05-16', status: 'overdue' },
-  { id: 'l-103', bookId: 'b-002', member: 'Idan Peretz', borrowed: '2026-05-04', due: '2026-05-19', status: 'overdue' },
-  { id: 'l-104', bookId: 'b-006', member: 'Tamar Hen', borrowed: '2026-05-08', due: '2026-05-21', status: 'overdue' },
-  { id: 'l-105', bookId: 'b-005', member: 'Daniel Cohen', borrowed: '2026-05-12', due: '2026-06-02', status: 'on-loan' },
-  { id: 'l-106', bookId: 'b-011', member: 'Eitan Bar', borrowed: '2026-05-14', due: '2026-06-04', status: 'on-loan' },
-  { id: 'l-107', bookId: 'b-010', member: 'Maya Levi', borrowed: '2026-05-18', due: '2026-06-08', status: 'on-loan' },
+const STATUS_TABS: Array<{ value: LibrarianLoansStatus; label: string }> = [
+  { value: 'all', label: 'All' },
+  { value: 'active', label: 'Active' },
+  { value: 'overdue', label: 'Overdue' },
+  { value: 'returned', label: 'Returned' },
 ]
 
 export function LibrarianLoans() {
+  const [status, setStatus] = useState<LibrarianLoansStatus>('all')
+  const [q, setQ] = useState('')
+  const queryClient = useQueryClient()
+
+  const params = { status, q: q.trim() || undefined, sort: 'recent' as const, limit: 100 }
+  const { data: loans = [], isLoading, isError } = useQuery({
+    queryKey: ['loans', params],
+    queryFn: () => listLoans(params),
+  })
+
+  const returnMutation = useMutation({
+    mutationFn: returnLoan,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['loans'] })
+      queryClient.invalidateQueries({ queryKey: ['books'] })
+    },
+  })
+
+  const activeCount = loans.filter((l) => l.status !== 'returned').length
+  const overdueCount = loans.filter((l) => l.status === 'overdue').length
+
   return (
     <div className="mx-auto max-w-7xl px-6 py-8 space-y-6">
       <header className="flex items-end justify-between">
         <div>
           <h1 className="text-3xl text-ink-900">Loans</h1>
           <p className="text-sm text-ink-500 mt-1">
-            {LOANS.filter((l) => l.status === 'on-loan').length} active ·{' '}
-            {LOANS.filter((l) => l.status === 'overdue').length} overdue
+            {activeCount} active · {overdueCount} overdue
           </p>
         </div>
         <div className="flex gap-2">
           <button className="btn-secondary">Send reminders</button>
-          <button className="btn-primary">+ New loan</button>
         </div>
       </header>
 
-      <div className="card p-4 flex gap-3 flex-wrap">
-        <input className="input flex-1 min-w-[200px]" placeholder="Search by member, book, loan #…" />
-        <select className="input md:w-40">
-          <option>All statuses</option>
-          <option>On loan</option>
-          <option>Overdue</option>
-          <option>Returned</option>
-        </select>
-        <input type="date" className="input md:w-40" />
-        <input type="date" className="input md:w-40" />
+      <div className="card p-4 flex gap-3 flex-wrap items-center">
+        <input
+          className="input flex-1 min-w-[220px]"
+          placeholder="Search by member, book title…"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
+        <div className="flex gap-1">
+          {STATUS_TABS.map((t) => (
+            <button
+              key={t.value}
+              type="button"
+              onClick={() => setStatus(t.value)}
+              className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                status === t.value
+                  ? 'bg-ink-800 text-parchment-50 border-ink-800'
+                  : 'bg-white border-ink-200 text-ink-700 hover:border-ink-400'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
       </div>
+
+      {isError && (
+        <div className="card p-6 text-sm text-coral-dark">Couldn't load loans.</div>
+      )}
 
       <div className="card overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-ink-50 text-ink-600 text-xs uppercase tracking-wide">
             <tr>
-              <th className="text-left px-4 py-3 font-medium">Loan</th>
               <th className="text-left px-4 py-3 font-medium">Book</th>
               <th className="text-left px-4 py-3 font-medium">Member</th>
               <th className="text-left px-4 py-3 font-medium">Borrowed</th>
               <th className="text-left px-4 py-3 font-medium">Due</th>
               <th className="text-left px-4 py-3 font-medium">Status</th>
+              <th className="text-left px-4 py-3 font-medium">Fine</th>
               <th className="text-right px-4 py-3 font-medium"> </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-ink-100">
-            {LOANS.map((l) => {
-              const book = findBook(l.bookId)
-              return (
-                <tr key={l.id} className="hover:bg-parchment-50">
-                  <td className="px-4 py-3 font-mono text-xs text-ink-500">{l.id}</td>
-                  <td className="px-4 py-3">
-                    {book && (
-                      <div className="flex items-center gap-3">
-                        <BookCover book={book} size="sm" />
-                        <div className="font-serif text-ink-900">{book.title}</div>
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-ink-700">{l.member}</td>
-                  <td className="px-4 py-3 text-ink-600">{l.borrowed}</td>
-                  <td className="px-4 py-3 text-ink-600">{l.due}</td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={
-                        l.status === 'overdue'
-                          ? 'chip-danger'
-                          : l.status === 'on-loan'
-                          ? 'chip-success'
-                          : 'chip'
-                      }
-                    >
-                      {l.status.replace('-', ' ')}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <button className="btn-ghost text-xs">Mark returned</button>
-                    <button className="btn-ghost text-xs">Renew</button>
-                  </td>
-                </tr>
-              )
-            })}
+            {isLoading && (
+              <tr>
+                <td colSpan={7} className="px-4 py-6 text-center text-ink-400">
+                  Loading…
+                </td>
+              </tr>
+            )}
+            {!isLoading && loans.length === 0 && (
+              <tr>
+                <td colSpan={7} className="px-4 py-6 text-center text-ink-400">
+                  No loans match these filters.
+                </td>
+              </tr>
+            )}
+            {loans.map((l) => (
+              <LoanTr
+                key={l.id}
+                loan={l}
+                onReturn={() => returnMutation.mutate(l.id)}
+                returnBusy={returnMutation.isPending && returnMutation.variables === l.id}
+              />
+            ))}
           </tbody>
         </table>
       </div>
     </div>
   )
+}
+
+function LoanTr({
+  loan,
+  onReturn,
+  returnBusy,
+}: {
+  loan: Loan
+  onReturn: () => void
+  returnBusy?: boolean
+}) {
+  const statusChip =
+    loan.status === 'overdue'
+      ? 'chip-danger'
+      : loan.status === 'on-loan'
+      ? 'chip-success'
+      : 'chip'
+
+  return (
+    <tr className="hover:bg-parchment-50">
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-3">
+          <BookCover
+            book={{
+              id: loan.book.id,
+              title: loan.book.title,
+              author: loan.book.author,
+              language: loan.book.language,
+            }}
+            size="sm"
+          />
+          <div className="font-serif text-ink-900">{loan.book.title}</div>
+        </div>
+      </td>
+      <td className="px-4 py-3 text-ink-700">
+        {loan.borrower
+          ? `${loan.borrower.firstName} ${loan.borrower.lastName}`
+          : '—'}
+        {loan.borrower && (
+          <div className="text-xs text-ink-400">{loan.borrower.email}</div>
+        )}
+      </td>
+      <td className="px-4 py-3 text-ink-600">{formatDate(loan.borrowedAt)}</td>
+      <td className="px-4 py-3 text-ink-600">{formatDate(loan.dueAt)}</td>
+      <td className="px-4 py-3">
+        <span className={statusChip}>{loan.status.replace('-', ' ')}</span>
+      </td>
+      <td className="px-4 py-3 text-ink-700">
+        {loan.fine > 0 ? `₪${loan.fine.toFixed(2)}` : '—'}
+      </td>
+      <td className="px-4 py-3 text-right">
+        {loan.status !== 'returned' && (
+          <button className="btn-ghost text-xs" onClick={onReturn} disabled={returnBusy}>
+            {returnBusy ? 'Returning…' : 'Mark returned'}
+          </button>
+        )}
+      </td>
+    </tr>
+  )
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-CA')
 }
