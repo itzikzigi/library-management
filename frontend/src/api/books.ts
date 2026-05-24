@@ -20,8 +20,7 @@ export type CatalogBook = {
 }
 
 export type BookDetail = CatalogBook & {
-  // detail endpoint returns the same shape today; reserved for future
-  // additions (avg rating histogram, reservation queue, etc.)
+  myRating: number | null
 }
 
 export type ListParams = {

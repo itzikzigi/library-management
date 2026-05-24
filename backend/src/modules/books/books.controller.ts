@@ -73,10 +73,19 @@ export async function getById(req: Request, res: Response, next: NextFunction) {
 
     const total = book.copies.length
     const available = book.copies.filter((c) => c.status === 'AVAILABLE').length
-    const avgRating =
+    const rating =
       book.ratings.length > 0
-        ? book.ratings.reduce((s, r) => s + r.value, 0) / book.ratings.length
+        ? Number((book.ratings.reduce((s, r) => s + r.value, 0) / book.ratings.length).toFixed(2))
         : null
+
+    let myRating: number | null = null
+    if (req.user) {
+      const mine = await prisma.rating.findUnique({
+        where: { userId_bookId: { userId: req.user.id, bookId: book.id } },
+        select: { value: true },
+      })
+      myRating = mine?.value ?? null
+    }
 
     res.json({
       data: {
@@ -92,8 +101,9 @@ export async function getById(req: Request, res: Response, next: NextFunction) {
         tags: book.tags.map((t) => t.name),
         total,
         available,
-        avgRating: avgRating !== null ? Number(avgRating.toFixed(2)) : null,
+        rating,
         ratingsCount: book.ratings.length,
+        myRating,
       },
     })
   } catch (err) {

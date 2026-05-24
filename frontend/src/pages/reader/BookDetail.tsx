@@ -7,11 +7,11 @@ import { BookCard } from '../../components/BookCard'
 import { StarRating } from '../../components/StarRating'
 import { getBook, listBooks } from '../../api/books'
 import { borrowBook } from '../../api/loans'
+import { deleteRating, rateBook } from '../../api/ratings'
 import { useAuth } from '../../lib/AuthProvider'
 
 export function BookDetailPage() {
   const { id } = useParams<{ id: string }>()
-  const [userRating, setUserRating] = useState(0)
   const [borrowError, setBorrowError] = useState<string | null>(null)
   const auth = useAuth()
   const navigate = useNavigate()
@@ -36,6 +36,22 @@ export function BookDetailPage() {
     onError: (err) => setBorrowError(extractBorrowError(err)),
   })
 
+  const rateMutation = useMutation({
+    mutationFn: (value: number) => rateBook(id!, value),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['book', id] })
+      queryClient.invalidateQueries({ queryKey: ['books'] })
+    },
+  })
+
+  const unrateMutation = useMutation({
+    mutationFn: () => deleteRating(id!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['book', id] })
+      queryClient.invalidateQueries({ queryKey: ['books'] })
+    },
+  })
+
   function onBorrowClick() {
     if (!id) return
     if (auth.status !== 'authenticated') {
@@ -43,6 +59,15 @@ export function BookDetailPage() {
       return
     }
     borrowMutation.mutate(id)
+  }
+
+  function onRate(value: number) {
+    if (!id) return
+    if (auth.status !== 'authenticated') {
+      navigate('/login', { state: { from: location.pathname } })
+      return
+    }
+    rateMutation.mutate(value)
   }
   const allBooksQuery = useQuery({
     queryKey: ['books', {}],
@@ -147,10 +172,30 @@ export function BookDetailPage() {
               Your ratings feed the recommender. Five stars from you boosts similar
               titles for readers with similar taste.
             </p>
-            <div className="flex items-center gap-4">
-              <StarRating value={userRating} onChange={setUserRating} size={26} />
-              {userRating > 0 && (
-                <span className="text-xs text-ink-600">You rated this {userRating}/5</span>
+            <div className="flex items-center gap-4 flex-wrap">
+              <StarRating value={book.myRating ?? 0} onChange={onRate} size={26} />
+              {book.myRating !== null && (
+                <>
+                  <span className="text-xs text-ink-600">
+                    You rated this {book.myRating}/5
+                  </span>
+                  <button
+                    type="button"
+                    className="text-xs text-ink-500 hover:text-coral-dark underline"
+                    onClick={() => unrateMutation.mutate()}
+                    disabled={unrateMutation.isPending}
+                  >
+                    {unrateMutation.isPending ? 'Removing…' : 'Remove rating'}
+                  </button>
+                </>
+              )}
+              {rateMutation.isPending && (
+                <span className="text-xs text-ink-400">Saving…</span>
+              )}
+              {auth.status !== 'authenticated' && book.myRating === null && (
+                <span className="text-xs text-ink-400">
+                  <Link to="/login" className="underline">Sign in</Link> to rate
+                </span>
               )}
             </div>
           </div>
