@@ -37,6 +37,9 @@ coverage/
 .DS_Store
 Thumbs.db
 
+# Claude Code — per-user local settings (shared settings.json is committed)
+.claude/settings.local.json
+
 # Prisma
 backend/prisma/*.db
 backend/prisma/*.db-journal
