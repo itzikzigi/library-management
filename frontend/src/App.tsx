@@ -1,5 +1,6 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
+import { RequireAuth } from './components/RequireAuth'
 import { LoginPage } from './pages/auth/Login'
 import { RegisterPage } from './pages/auth/Register'
 import { CatalogPage } from './pages/reader/Catalog'
@@ -18,14 +19,61 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route element={<AppShell />}>
+          {/* Public — guest browsing allowed */}
           <Route path="/" element={<CatalogPage />} />
           <Route path="/book/:id" element={<BookDetailPage />} />
-          <Route path="/recommendations" element={<RecommendationsPage />} />
-          <Route path="/my-loans" element={<MyLoansPage />} />
-          <Route path="/librarian" element={<LibrarianDashboard />} />
-          <Route path="/librarian/books" element={<LibrarianBooks />} />
-          <Route path="/librarian/members" element={<LibrarianMembers />} />
-          <Route path="/librarian/loans" element={<LibrarianLoans />} />
+
+          {/* Reader-only (any authed user) */}
+          <Route
+            path="/recommendations"
+            element={
+              <RequireAuth>
+                <RecommendationsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/my-loans"
+            element={
+              <RequireAuth>
+                <MyLoansPage />
+              </RequireAuth>
+            }
+          />
+
+          {/* Librarian-only */}
+          <Route
+            path="/librarian"
+            element={
+              <RequireAuth role="LIBRARIAN">
+                <LibrarianDashboard />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/librarian/books"
+            element={
+              <RequireAuth role="LIBRARIAN">
+                <LibrarianBooks />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/librarian/members"
+            element={
+              <RequireAuth role="LIBRARIAN">
+                <LibrarianMembers />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/librarian/loans"
+            element={
+              <RequireAuth role="LIBRARIAN">
+                <LibrarianLoans />
+              </RequireAuth>
+            }
+          />
         </Route>
       </Routes>
     </BrowserRouter>

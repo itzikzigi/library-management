@@ -1,8 +1,35 @@
-import { Link } from 'react-router-dom'
+import { useState } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { isAxiosError } from 'axios'
+import { useAuth } from '../../lib/AuthProvider'
 
 export function LoginPage() {
+  const { login } = useAuth()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const from = (location.state as { from?: string } | null)?.from ?? '/'
+
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    setSubmitting(true)
+    try {
+      await login({ email, password })
+      navigate(from, { replace: true })
+    } catch (err) {
+      setError(extractError(err))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   return (
-    <div className="min-h-full grid md:grid-cols-2">
+    <div className="min-h-screen grid md:grid-cols-2">
       <div
         className="hidden md:flex flex-col justify-between p-12 text-parchment-50 relative overflow-hidden"
         style={{
@@ -33,19 +60,42 @@ export function LoginPage() {
             <h2 className="text-2xl text-ink-900">Welcome back</h2>
             <p className="text-sm text-ink-500 mt-1">Sign in to your library account.</p>
           </div>
-          <form className="space-y-4">
+          <form className="space-y-4" onSubmit={onSubmit}>
             <div>
               <label className="text-xs font-medium text-ink-600">Email</label>
-              <input className="input mt-1" placeholder="you@library.org" />
+              <input
+                className="input mt-1"
+                type="email"
+                autoComplete="email"
+                required
+                placeholder="you@library.org"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
             </div>
             <div>
               <div className="flex justify-between">
                 <label className="text-xs font-medium text-ink-600">Password</label>
                 <a className="text-xs text-ink-500 hover:text-ink-800">Forgot?</a>
               </div>
-              <input className="input mt-1" type="password" placeholder="••••••••" />
+              <input
+                className="input mt-1"
+                type="password"
+                autoComplete="current-password"
+                required
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
             </div>
-            <button className="btn-primary w-full" type="button">Sign in</button>
+            {error && (
+              <div className="text-xs text-coral-dark bg-coral/10 border border-coral/30 rounded-md px-3 py-2">
+                {error}
+              </div>
+            )}
+            <button className="btn-primary w-full" type="submit" disabled={submitting}>
+              {submitting ? 'Signing in…' : 'Sign in'}
+            </button>
           </form>
           <div className="flex items-center gap-3 text-xs text-ink-400">
             <div className="flex-1 border-t border-ink-100" />
@@ -57,8 +107,23 @@ export function LoginPage() {
             New here?{' '}
             <Link to="/register" className="text-ink-800 underline">Create an account</Link>
           </p>
+          <p className="text-[11px] text-center text-ink-400">
+            Try <code className="bg-ink-50 px-1 rounded">sara@library.org / library123</code> or{' '}
+            <code className="bg-ink-50 px-1 rounded">yael@example.com / reader123</code>
+          </p>
         </div>
       </div>
     </div>
   )
+}
+
+function extractError(err: unknown): string {
+  if (isAxiosError(err)) {
+    const code = err.response?.data?.error?.code
+    const message = err.response?.data?.error?.message
+    if (code === 'INVALID_CREDENTIALS') return 'Email or password is incorrect.'
+    if (code === 'TOO_MANY_REQUESTS') return 'Too many attempts. Try again in a few minutes.'
+    if (typeof message === 'string') return message
+  }
+  return 'Something went wrong. Please try again.'
 }
