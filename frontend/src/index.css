@@ -1,0 +1,82 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    @apply h-full;
+  }
+  body {
+    @apply text-ink-900 font-sans antialiased;
+    background-color: #fef8ee;
+    background-image:
+      radial-gradient(at 12% 0%, rgba(240, 168, 48, 0.18) 0px, transparent 50%),
+      radial-gradient(at 95% 0%, rgba(214, 51, 108, 0.10) 0px, transparent 50%),
+      radial-gradient(at 50% 100%, rgba(31, 154, 114, 0.10) 0px, transparent 55%);
+    background-attachment: fixed;
+  }
+  h1,
+  h2,
+  h3 {
+    @apply font-serif tracking-tight;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium
+           transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2
+           focus-visible:ring-ink-600;
+  }
+  .btn-primary {
+    @apply btn bg-ink-700 text-parchment-50 hover:bg-ink-800 shadow-sm hover:shadow;
+  }
+  .btn-accent {
+    @apply btn bg-amber text-ink-950 hover:bg-amber-dark hover:text-parchment-50 shadow-sm;
+  }
+  .btn-berry {
+    @apply btn bg-berry text-white hover:bg-berry-dark shadow-sm;
+  }
+  .btn-secondary {
+    @apply btn border border-ink-300 bg-white text-ink-800 hover:bg-ink-50 hover:border-ink-500;
+  }
+  .btn-ghost {
+    @apply btn text-ink-700 hover:bg-ink-100;
+  }
+  .input {
+    @apply w-full rounded-md border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900
+           placeholder:text-ink-400 focus:border-ink-500 focus:outline-none
+           focus:ring-2 focus:ring-ink-200;
+  }
+  .card {
+    @apply rounded-xl bg-white shadow-card border border-ink-100;
+  }
+  .chip {
+    @apply inline-flex items-center rounded-full bg-ink-100 px-2.5 py-0.5 text-xs font-medium
+           text-ink-700;
+  }
+  .chip-accent {
+    @apply chip bg-parchment-100;
+    color: #b96a05;
+  }
+  .chip-berry {
+    @apply chip;
+    color: #a01650;
+    background-color: rgb(214 51 108 / 0.15);
+  }
+  .chip-success {
+    @apply chip bg-ink-100 text-ink-700;
+  }
+  .chip-warn {
+    @apply chip;
+    color: #b96a05;
+    background-color: rgb(240 168 48 / 0.2);
+  }
+  .chip-danger {
+    @apply chip;
+    color: #b71c1c;
+    background-color: rgb(239 83 80 / 0.18);
+  }
+}
