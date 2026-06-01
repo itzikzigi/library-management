@@ -78,6 +78,15 @@ export async function login(req: Request, res: Response, next: NextFunction) {
  * rotate the refresh token. The old refresh token is revoked.
  * Input: refresh cookie
  * Output: 200 { accessToken } + new httpOnly refresh cookie
+ *
+ * Concurrency: rotation must be exactly-once even when two callers race
+ * with the same cookie (two browser tabs booting at the same time, etc.).
+ * The CAS-style `updateMany({ where: { revokedAt: null }, ... })` flips
+ * the row only if it's still unrevoked; Postgres row-level locking
+ * serialises concurrent UPDATEs so exactly one caller's `count` is 1.
+ * The loser gets a 401 with code REFRESH_RACE and does NOT clear the
+ * cookie — the winner has already set a fresh one in the same response
+ * batch, and clearing would race-overwrite it in the browser's cookie jar.
  */
 export async function refresh(req: Request, res: Response, next: NextFunction) {
   try {
@@ -93,11 +102,15 @@ export async function refresh(req: Request, res: Response, next: NextFunction) {
       throw new HttpError(401, 'INVALID_REFRESH', 'Refresh token is invalid or expired')
     }
 
-    // Rotate: revoke the used token, issue a new one.
-    await prisma.refreshToken.update({
-      where: { id: record.id },
+    // Atomically claim the rotation. Only one parallel caller wins.
+    const claim = await prisma.refreshToken.updateMany({
+      where: { id: record.id, revokedAt: null },
       data: { revokedAt: new Date() },
     })
+    if (claim.count === 0) {
+      throw new HttpError(401, 'REFRESH_RACE', 'Refresh token already rotated, retry')
+    }
+
     await issueTokens(res, record.user)
     res.json({ accessToken: res.locals.accessToken })
   } catch (err) {
