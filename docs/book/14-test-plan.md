@@ -13,9 +13,12 @@ list of scenarios verified by hand against a seeded local Postgres + the
 running Express server. The "Status" column below maps every full-flow row
 back to the worklog entry where its verification is recorded.
 
-The planned automation stack is **Jest + Supertest** for API tests and
+The automation stack is **Jest + Supertest** for API tests and
 **React Testing Library** for UI tests, listed in chapter 7's tech stack
-table. The automation roadmap appears at the end of this chapter.
+table. Phase 1 of the roadmap is **done**: the suite runs against a
+dedicated `library_test` database (`npm test` in `backend/`), and the
+first automated case is F7 (the refresh-rotation race). The remaining
+phases appear at the end of this chapter.
 
 ### Test environment
 
@@ -38,8 +41,8 @@ table. The automation roadmap appears at the end of this chapter.
 | F3 | auth | Login success | `POST /auth/login` with valid credentials | 200, access token + refresh cookie | Pass (worklog #7) |
 | F4 | auth | Login wrong password | `POST /auth/login` with valid email, bad password | 401 `INVALID_CREDENTIALS` (identical shape to "missing user" — no email enumeration) | Pass (worklog #7) |
 | F5 | auth | Refresh rotation (single) | `POST /auth/refresh` once with valid cookie | 200, new access token, refresh cookie rotated, old row's `revokedAt` set | Pass (worklog #7) |
-| F6 | auth | Old refresh after rotation | Reuse the pre-rotation refresh cookie | 401 `INVALID_REFRESH` | Pass (worklog #7) |
-| F7 | auth | Parallel refresh — CAS losers | Two parallel `POST /auth/refresh` with the same cookie | Exactly one 200; the other returns 401 `REFRESH_RACE` **without** clearing the cookie; frontend `refreshAccessToken` retries the loser once and succeeds with the winner's freshly-set cookie | Planned — to be the first automated Jest+Supertest case (the race window is sub-millisecond and cannot be reliably reproduced by hand) |
+| F6 | auth | Old refresh after rotation | Reuse the pre-rotation refresh cookie | 401 `REFRESH_RACE`, cookie left intact. (Reuse of a *known, revoked-but-unexpired* token is indistinguishable from a concurrent-race loser, so both take the same no-clear path; `INVALID_REFRESH` + clear is reserved for *unknown / expired* tokens — see F7.) | Pass (automated — `tests/auth.refresh-race.test.ts`) |
+| F7 | auth | Parallel refresh — CAS losers | Two parallel `POST /auth/refresh` with the same cookie, ×8 per run | Exactly one 200 (rotates the cookie); the other returns 401 `REFRESH_RACE` **without** clearing the cookie, **every time** (not timing-dependent); an unknown token still yields `INVALID_REFRESH` + clear | Pass (automated — `tests/auth.refresh-race.test.ts`; 8 races/run, run 4× = 32 races, all deterministic). **Exposed a bug**: the pre-fix code cleared the cookie on ~5% of races via the `INVALID_REFRESH` path — fixed by making the CAS the sole arbiter of revocation (worklog #17). |
 | F8 | auth | Logout | `POST /auth/logout` | 204, refresh cookie cleared, row's `revokedAt` set | Pass (worklog #7) |
 | F9 | auth | `/me` without token | `GET /auth/me` with no Authorization header | 401 `UNAUTHORIZED` | Pass (worklog #7) |
 | F10 | auth | Rate-limited login | 11 `POST /auth/login` from same IP in 15 min | 11th → 429 `TOO_MANY_REQUESTS` | Pass (worklog #7) |
@@ -134,14 +137,19 @@ table. The automation roadmap appears at the end of this chapter.
 
 ## Automation roadmap
 
-1. **Phase 1 — first automated case (highest leverage).** Install `jest`,
-   `ts-jest`, `supertest`, `@types/jest`, `@types/supertest`. Factor
-   `backend/src/app.ts` out of `server.ts` (so the Express instance can be
-   handed to Supertest without binding a port). Add `DATABASE_URL_TEST`
-   pointing at a second database on the same Postgres instance; run
-   `prisma migrate deploy` in `globalSetup` and truncate tables in
-   `beforeEach`. Write **F7** (parallel refresh) as the first integration
-   test — this is the row that genuinely cannot be reproduced by hand.
+1. **Phase 1 — first automated case (highest leverage). ✅ DONE.** Installed
+   `jest`, `ts-jest`, `supertest`, `@types/jest`, `@types/supertest`,
+   `cross-env`. The Express instance was already a `createApp()` factory in
+   `backend/src/app.ts`, so Supertest drives it without binding a port. Added
+   `DATABASE_URL_TEST` pointing at a second database (`library_test`) on the
+   same Postgres instance; `tests/setup-env.ts` maps it onto `DATABASE_URL`
+   before any app module loads, and `tests/globalSetup.ts` runs
+   `prisma migrate deploy` against it. Because the project is native ESM with
+   `.js` import specifiers, Jest runs under `--experimental-vm-modules` with
+   the `ts-jest/presets/default-esm` preset and a `moduleNameMapper` that
+   strips the `.js` suffix (`jest.config.js`). **F7** (parallel refresh) is
+   the first integration test — and writing it surfaced a real ~5% cookie-clear
+   bug in the race handling, now fixed (worklog #17).
 2. **Phase 2 — port F-rows.** Migrate F1–F57 into Supertest specs grouped
    by module. Start with F26 (last-copy race) since it shares the
    concurrency-infrastructure justification with F7.
