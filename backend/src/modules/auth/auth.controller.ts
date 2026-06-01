@@ -84,9 +84,24 @@ export async function login(req: Request, res: Response, next: NextFunction) {
  * The CAS-style `updateMany({ where: { revokedAt: null }, ... })` flips
  * the row only if it's still unrevoked; Postgres row-level locking
  * serialises concurrent UPDATEs so exactly one caller's `count` is 1.
- * The loser gets a 401 with code REFRESH_RACE and does NOT clear the
- * cookie — the winner has already set a fresh one in the same response
- * batch, and clearing would race-overwrite it in the browser's cookie jar.
+ *
+ * The CAS is the *sole* arbiter of revocation — we deliberately do NOT
+ * short-circuit on `record.revokedAt` from the initial read. If we did,
+ * a loser whose read happened to land *after* the winner committed the
+ * revoke would fall into the INVALID_REFRESH path and clear the cookie,
+ * race-overwriting the fresh cookie the winner just set in the same
+ * response batch and logging a valid cross-tab session out. (Measured at
+ * ~5% of races before this change — see tests/auth.refresh-race.test.ts.)
+ *
+ * So any *known, unexpired* token that the CAS finds already revoked —
+ * whether a concurrent-rotation loser or a reuse of an already-rotated
+ * token — returns 401 REFRESH_RACE and does NOT clear the cookie. The
+ * client retries once on this code (single-flight, see api/refresh.ts);
+ * a genuinely-dead token simply fails the retry and the session ends.
+ * INVALID_REFRESH + cookie-clear is reserved for tokens that are unknown
+ * (never existed / wrong hash) or past their expiry — never for the race.
+ * We do not do token-family revocation, so clearing on reuse never bought
+ * any theft protection; it was only client-side cookie hygiene.
  */
 export async function refresh(req: Request, res: Response, next: NextFunction) {
   try {
@@ -97,12 +112,15 @@ export async function refresh(req: Request, res: Response, next: NextFunction) {
       where: { tokenHash: hashRefreshToken(raw) },
       include: { user: true },
     })
-    if (!record || record.revokedAt || record.expiresAt < new Date()) {
+    // Unknown or expired token: genuinely dead — clear the cookie. (A revoked
+    // token is NOT handled here; it flows to the CAS below, see the header.)
+    if (!record || record.expiresAt < new Date()) {
       clearRefreshCookie(res)
       throw new HttpError(401, 'INVALID_REFRESH', 'Refresh token is invalid or expired')
     }
 
-    // Atomically claim the rotation. Only one parallel caller wins.
+    // Atomically claim the rotation. Only one parallel caller wins; everyone
+    // else (race loser or stale-token reuse) gets REFRESH_RACE without a clear.
     const claim = await prisma.refreshToken.updateMany({
       where: { id: record.id, revokedAt: null },
       data: { revokedAt: new Date() },

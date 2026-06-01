@@ -82,10 +82,31 @@ We picked **C**.
   expire) is acceptable for a small library context but not for
   high-stakes systems.
 - Refresh rotation creates a brief race window: if two tabs refresh
-  simultaneously, one will see its refresh token already revoked. We
-  accept this; the user will be sent to the login screen and reauth.
-  Reuse detection (invalidate all sessions when a revoked token is
-  presented) is a worthwhile future enhancement.
+  simultaneously with the same cookie, one loses. We make the loss
+  *recoverable* rather than fatal. The losing caller is decided by an
+  atomic CAS (`updateMany({ where: { id, revokedAt: null } })`, serialised
+  by Postgres row locks so exactly one caller's `count` is 1) and returns
+  401 `REFRESH_RACE` **without clearing the cookie** — the client retries
+  once (single-flight, `frontend/src/api/refresh.ts`) and succeeds with the
+  winner's freshly-set cookie. The CAS is the *sole* arbiter of revocation:
+  we deliberately do **not** short-circuit on the initial read's
+  `revokedAt`, because a loser whose read lands after the winner's commit
+  would otherwise fall into the cookie-clearing `INVALID_REFRESH` path and
+  log a valid cross-tab session out. This was measured at ~5% of races
+  before the fix and is now driven to 0 by an automated test
+  (`backend/tests/auth.refresh-race.test.ts`, chapter 14 row F7).
+  - **Accepted consequence:** reuse of a *known, revoked-but-unexpired*
+    token is indistinguishable from a race loser, so it too returns
+    `REFRESH_RACE` and is not cleared. `INVALID_REFRESH` + cookie-clear is
+    reserved for *unknown* or *expired* tokens.
+  - **Not done:** token-family reuse detection (revoke all of a user's
+    sessions when a revoked token is replayed) — the OWASP-recommended
+    theft response. We omit it deliberately: it is incompatible with the
+    retry-on-race design (a race loser would trigger a full logout), and
+    for a small library it is disproportionate. Clearing the cookie on
+    reuse never bought theft protection anyway — without family revocation
+    an attacker keeps their own copy — so it was only client-side hygiene.
+    This is a known limitation, defensible by scope, not an oversight.
 - `localStorage` was rejected for the *refresh* token but the *access*
   token still has to live somewhere on the client. We hold it in memory
   (React context / React Query cache) and accept that a hard refresh
