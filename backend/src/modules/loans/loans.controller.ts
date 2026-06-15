@@ -27,11 +27,11 @@ export async function listMine(req: Request, res: Response, next: NextFunction) 
   }
 }
 
-/** POST /api/v1/loans/:id/return — return one loan. */
+/** POST /api/v1/loans/:id/return — librarian records a returned loan. */
 export async function returnLoan(req: Request, res: Response, next: NextFunction) {
   try {
     if (!req.user) throw new HttpError(401, 'UNAUTHORIZED', 'Authentication required')
-    const loan = await service.returnLoan(req.params.id!, req.user.id, req.user.role)
+    const loan = await service.returnLoan(req.params.id!)
     res.json({ data: service.toLoanDTO(loan) })
   } catch (err) {
     next(err)

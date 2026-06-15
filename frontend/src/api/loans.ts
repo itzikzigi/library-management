@@ -11,7 +11,6 @@ export type Loan = {
   status: LoanStatus
   daysUntilDue: number | null
   daysOverdue: number
-  fine: number
   canRenew: boolean
   book: {
     id: string

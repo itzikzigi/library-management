@@ -50,7 +50,8 @@ backend/prisma/*.db-journal
 # Docker
 docker-compose.override.yml
 
-# Documents — keep .docx; ignore lock files and exports
-~$*.docx
-~$*.doc
+# Documents — the project book .docx is a large binary; keep it OUT of git.
+# (Its embedded figures live under docs/screenshots and docs/diagrams.)
+*.docx
+*.doc
 docs/book/exports/

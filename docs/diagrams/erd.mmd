@@ -1,0 +1,95 @@
+%% Library Management — Entity-Relationship Diagram
+%% Generated from backend/prisma/schema.prisma
+%% Book–Category and Book–Tag are many-to-many (Prisma materialises each as an
+%% implicit junction table: _BookToCategory, _BookToTag).
+erDiagram
+  User ||--o{ RefreshToken : "has"
+  User ||--o{ Loan : "borrows"
+  User ||--o{ Reservation : "places"
+  User ||--o{ Rating : "gives"
+  Author ||--o{ Book : "writes"
+  Book ||--o{ BookCopy : "has"
+  Book ||--o{ Reservation : "reserved as"
+  Book ||--o{ Rating : "rated as"
+  BookCopy ||--o{ Loan : "lent as"
+  Book }o--o{ Category : "categorised in"
+  Book }o--o{ Tag : "tagged with"
+
+  User {
+    string id PK
+    string email UK
+    string passwordHash
+    string firstName
+    string lastName
+    Role role
+    datetime createdAt
+    datetime updatedAt
+  }
+  RefreshToken {
+    string id PK
+    string userId FK
+    string tokenHash UK
+    datetime expiresAt
+    datetime revokedAt "nullable"
+    datetime createdAt
+  }
+  Author {
+    string id PK
+    string name UK
+    string bio "nullable"
+    datetime createdAt
+  }
+  Category {
+    string id PK
+    string name UK
+    string slug UK
+  }
+  Tag {
+    string id PK
+    string name UK
+  }
+  Book {
+    string id PK
+    string isbn UK "nullable"
+    string title
+    string blurb "nullable"
+    int year "nullable"
+    Language language
+    string shelfCode "nullable"
+    string authorId FK
+    datetime createdAt
+    datetime updatedAt
+  }
+  BookCopy {
+    string id PK
+    string barcode UK
+    CopyStatus status
+    datetime acquiredAt
+    string bookId FK
+  }
+  Loan {
+    string id PK
+    datetime borrowedAt
+    datetime dueAt
+    datetime returnedAt "nullable"
+    int renewals
+    string borrowerId FK
+    string copyId FK
+  }
+  Reservation {
+    string id PK
+    datetime createdAt
+    ReservationStatus status
+    datetime fulfilledAt "nullable"
+    datetime cancelledAt "nullable"
+    string userId FK
+    string bookId FK
+  }
+  Rating {
+    string id PK
+    int value
+    datetime createdAt
+    datetime updatedAt
+    string userId FK
+    string bookId FK
+  }

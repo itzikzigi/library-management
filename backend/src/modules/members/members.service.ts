@@ -1,14 +1,13 @@
 import { Prisma, type User } from '@prisma/client'
 import { prisma } from '../../lib/prisma.js'
 import { HttpError } from '../../utils/HttpError.js'
-import { FINE_PER_DAY } from '../loans/loans.config.js'
 import type { ListMembersQuery, UpdateMemberBody } from './members.schema.js'
 
 /**
  * Member DTO carries the user record plus a couple of derived columns the
- * librarian Members page needs: count of active (unreturned) loans and the
- * accumulated fine across overdue loans. Computed in JS, not SQL, because
- * the catalog is small and FINE_PER_DAY lives in code.
+ * librarian Members page needs: count of active (unreturned) loans and how
+ * many of those are overdue. Computed in JS, not SQL, because the catalog
+ * is small.
  */
 export type MemberDTO = {
   id: string
@@ -19,10 +18,7 @@ export type MemberDTO = {
   createdAt: string
   activeLoans: number
   overdueLoans: number
-  outstandingFine: number
 }
-
-const MS_IN_DAY = 24 * 60 * 60 * 1000
 
 export async function listMembers(opts: ListMembersQuery): Promise<MemberDTO[]> {
   const where: Prisma.UserWhereInput = {}
@@ -50,22 +46,14 @@ export async function listMembers(opts: ListMembersQuery): Promise<MemberDTO[]> 
   let dtos = users.map((u): MemberDTO => {
     const activeLoans = u.loans.length
     let overdueLoans = 0
-    let outstandingFine = 0
     for (const loan of u.loans) {
-      if (loan.dueAt < now) {
-        overdueLoans += 1
-        const daysOverdue = Math.floor((now.getTime() - loan.dueAt.getTime()) / MS_IN_DAY)
-        outstandingFine += daysOverdue * FINE_PER_DAY
-      }
+      if (loan.dueAt < now) overdueLoans += 1
     }
-    return toDTO(u, activeLoans, overdueLoans, outstandingFine)
+    return toDTO(u, activeLoans, overdueLoans)
   })
 
   if (opts.status === 'active-loans') {
     dtos = dtos.filter((m) => m.activeLoans > 0)
-  }
-  if (opts.status === 'has-fines') {
-    dtos = dtos.filter((m) => m.outstandingFine > 0)
   }
   return dtos
 }
@@ -83,15 +71,10 @@ export async function getMember(id: string): Promise<MemberDTO> {
   if (!user) throw new HttpError(404, 'NOT_FOUND', 'Member not found')
   const now = new Date()
   let overdueLoans = 0
-  let outstandingFine = 0
   for (const loan of user.loans) {
-    if (loan.dueAt < now) {
-      overdueLoans += 1
-      const daysOverdue = Math.floor((now.getTime() - loan.dueAt.getTime()) / MS_IN_DAY)
-      outstandingFine += daysOverdue * FINE_PER_DAY
-    }
+    if (loan.dueAt < now) overdueLoans += 1
   }
-  return toDTO(user, user.loans.length, overdueLoans, outstandingFine)
+  return toDTO(user, user.loans.length, overdueLoans)
 }
 
 export async function updateMember(
@@ -144,12 +127,7 @@ export async function deleteMember(id: string, requesterId: string): Promise<voi
   await prisma.user.delete({ where: { id } })
 }
 
-function toDTO(
-  u: User,
-  activeLoans: number,
-  overdueLoans: number,
-  outstandingFine: number,
-): MemberDTO {
+function toDTO(u: User, activeLoans: number, overdueLoans: number): MemberDTO {
   return {
     id: u.id,
     email: u.email,
@@ -159,6 +137,5 @@ function toDTO(
     createdAt: u.createdAt.toISOString(),
     activeLoans,
     overdueLoans,
-    outstandingFine,
   }
 }

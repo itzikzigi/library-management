@@ -89,21 +89,20 @@ export function LibrarianLoans() {
               <th className="text-left px-4 py-3 font-medium">Borrowed</th>
               <th className="text-left px-4 py-3 font-medium">Due</th>
               <th className="text-left px-4 py-3 font-medium">Status</th>
-              <th className="text-left px-4 py-3 font-medium">Fine</th>
               <th className="text-right px-4 py-3 font-medium"> </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-ink-100">
             {isLoading && (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-ink-400">
+                <td colSpan={6} className="px-4 py-6 text-center text-ink-400">
                   Loading…
                 </td>
               </tr>
             )}
             {!isLoading && loans.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-ink-400">
+                <td colSpan={6} className="px-4 py-6 text-center text-ink-400">
                   No loans match these filters.
                 </td>
               </tr>
@@ -167,9 +166,6 @@ function LoanTr({
       <td className="px-4 py-3 text-ink-600">{formatDate(loan.dueAt)}</td>
       <td className="px-4 py-3">
         <span className={statusChip}>{loan.status.replace('-', ' ')}</span>
-      </td>
-      <td className="px-4 py-3 text-ink-700">
-        {loan.fine > 0 ? `₪${loan.fine.toFixed(2)}` : '—'}
       </td>
       <td className="px-4 py-3 text-right">
         {loan.status !== 'returned' && (

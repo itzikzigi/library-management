@@ -13,14 +13,14 @@ export function LibrarianMembers() {
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
   const [role, setRole] = useState<'' | Role>('')
-  const [status, setStatus] = useState<'' | 'active-loans' | 'has-fines'>('')
+  const [status, setStatus] = useState<'' | 'active-loans'>('')
   const [editing, setEditing] = useState<Member | null>(null)
 
   const params = useMemo(
     () => ({
       q: search.trim() || undefined,
       role: (role || undefined) as Role | undefined,
-      status: (status || undefined) as 'active-loans' | 'has-fines' | undefined,
+      status: (status || undefined) as 'active-loans' | undefined,
     }),
     [search, role, status],
   )
@@ -60,13 +60,10 @@ export function LibrarianMembers() {
         <select
           className="input md:w-44"
           value={status}
-          onChange={(e) =>
-            setStatus(e.target.value as 'active-loans' | 'has-fines' | '')
-          }
+          onChange={(e) => setStatus(e.target.value as 'active-loans' | '')}
         >
           <option value="">Any status</option>
           <option value="active-loans">Active loans</option>
-          <option value="has-fines">Has fines</option>
         </select>
       </div>
 
@@ -85,7 +82,6 @@ export function LibrarianMembers() {
               <th className="text-left px-4 py-3 font-medium">Role</th>
               <th className="text-left px-4 py-3 font-medium">Joined</th>
               <th className="text-left px-4 py-3 font-medium">Active loans</th>
-              <th className="text-left px-4 py-3 font-medium">Fines</th>
               <th className="text-right px-4 py-3 font-medium"> </th>
             </tr>
           </thead>
@@ -120,13 +116,6 @@ export function LibrarianMembers() {
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-3">
-                    {m.outstandingFine > 0 ? (
-                      <span className="chip-warn">₪{m.outstandingFine.toFixed(2)}</span>
-                    ) : (
-                      <span className="text-ink-400">—</span>
-                    )}
-                  </td>
                   <td className="px-4 py-3 text-right">
                     <button className="btn-ghost text-xs" onClick={() => setEditing(m)}>
                       Edit
@@ -137,7 +126,7 @@ export function LibrarianMembers() {
             })}
             {!isLoading && members.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-ink-400 text-sm">
+                <td colSpan={6} className="px-4 py-10 text-center text-ink-400 text-sm">
                   No members match the current filter.
                 </td>
               </tr>
