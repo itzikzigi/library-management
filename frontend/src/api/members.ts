@@ -11,13 +11,12 @@ export type Member = {
   createdAt: string
   activeLoans: number
   overdueLoans: number
-  outstandingFine: number
 }
 
 export type ListMembersParams = {
   q?: string
   role?: Role
-  status?: 'active-loans' | 'has-fines'
+  status?: 'active-loans'
 }
 
 export async function listMembers(params: ListMembersParams = {}): Promise<Member[]> {

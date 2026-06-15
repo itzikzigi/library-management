@@ -14,7 +14,12 @@ import * as ctrl from './loans.controller.js'
 export const loansRouter = Router()
 loansRouter.use(requireAuth)
 loansRouter.post('/', validate({ body: borrowSchema }), ctrl.borrow)
-loansRouter.post('/:id/return', validate({ params: loanIdParams }), ctrl.returnLoan)
+loansRouter.post(
+  '/:id/return',
+  requireRole('LIBRARIAN'),
+  validate({ params: loanIdParams }),
+  ctrl.returnLoan,
+)
 loansRouter.post('/:id/renew', validate({ params: loanIdParams }), ctrl.renew)
 loansRouter.get(
   '/',

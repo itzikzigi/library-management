@@ -1,12 +1,7 @@
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { BookCover } from '../../components/BookCover'
-import {
-  listMyLoans,
-  renewLoan,
-  returnLoan,
-  type Loan,
-} from '../../api/loans'
+import { listMyLoans, renewLoan, type Loan } from '../../api/loans'
 import {
   cancelReservation,
   listMyReservations,
@@ -32,7 +27,6 @@ export function MyLoansPage() {
   }
 
   const renewMutation = useMutation({ mutationFn: renewLoan, onSuccess: invalidate })
-  const returnMutation = useMutation({ mutationFn: returnLoan, onSuccess: invalidate })
   const cancelHoldMutation = useMutation({
     mutationFn: cancelReservation,
     onSuccess: invalidate,
@@ -40,7 +34,6 @@ export function MyLoansPage() {
 
   const active = loans.filter((l) => l.status !== 'returned')
   const history = loans.filter((l) => l.status === 'returned')
-  const totalFines = active.reduce((sum, l) => sum + l.fine, 0)
   const activeHolds = reservations.filter((r) => r.status === 'PENDING')
   const readyHolds = reservations.filter((r) => r.status === 'FULFILLED')
 
@@ -53,14 +46,9 @@ export function MyLoansPage() {
         </p>
       </header>
 
-      <div className="grid sm:grid-cols-3 gap-4">
+      <div className="grid sm:grid-cols-2 gap-4">
         <Stat label="On loan" value={active.filter((l) => l.status === 'on-loan').length} />
         <Stat label="Overdue" value={active.filter((l) => l.status === 'overdue').length} tone={active.some((l) => l.status === 'overdue') ? 'warn' : 'neutral'} />
-        <Stat
-          label="Outstanding fines"
-          value={`₪${totalFines.toFixed(2)}`}
-          tone={totalFines > 0 ? 'warn' : 'neutral'}
-        />
       </div>
 
       {isLoading && <div className="text-sm text-ink-500">Loading…</div>}
@@ -75,9 +63,7 @@ export function MyLoansPage() {
               key={l.id}
               loan={l}
               onRenew={() => renewMutation.mutate(l.id)}
-              onReturn={() => returnMutation.mutate(l.id)}
               renewBusy={renewMutation.isPending && renewMutation.variables === l.id}
-              returnBusy={returnMutation.isPending && returnMutation.variables === l.id}
             />
           ))}
         </Section>
@@ -170,12 +156,10 @@ function Stat({
 type RowProps = {
   loan: Loan
   onRenew?: () => void
-  onReturn?: () => void
   renewBusy?: boolean
-  returnBusy?: boolean
 }
 
-function LoanRow({ loan, onRenew, onReturn, renewBusy, returnBusy }: RowProps) {
+function LoanRow({ loan, onRenew, renewBusy }: RowProps) {
   const statusChip =
     loan.status === 'overdue'
       ? 'chip-danger'
@@ -187,7 +171,7 @@ function LoanRow({ loan, onRenew, onReturn, renewBusy, returnBusy }: RowProps) {
     loan.status === 'returned'
       ? `Returned ${formatDate(loan.returnedAt!)}`
       : loan.status === 'overdue'
-      ? `${loan.daysOverdue} days overdue · ₪${loan.fine} fine`
+      ? `${loan.daysOverdue} days overdue`
       : `${loan.daysUntilDue} days remaining`
 
   return (
@@ -226,16 +210,6 @@ function LoanRow({ loan, onRenew, onReturn, renewBusy, returnBusy }: RowProps) {
             disabled={renewBusy}
           >
             {renewBusy ? 'Renewing…' : `Renew (${loan.renewals}/2)`}
-          </button>
-        )}
-        {loan.status !== 'returned' && onReturn && (
-          <button
-            type="button"
-            className={loan.status === 'overdue' ? 'btn-primary' : 'btn-ghost'}
-            onClick={onReturn}
-            disabled={returnBusy}
-          >
-            {returnBusy ? 'Returning…' : 'Return'}
           </button>
         )}
       </div>

@@ -103,7 +103,6 @@ export function LibrarianDashboard() {
 
   const activeLoans = activeQuery.data ?? []
   const overdue = overdueQuery.data ?? []
-  const overdueTotalFines = overdue.reduce((s, l) => s + l.fine, 0)
   const recent = recentQuery.data ?? []
 
   const stats: Stat[] = [
@@ -119,7 +118,7 @@ export function LibrarianDashboard() {
     {
       label: 'Overdue',
       value: overdue.length,
-      delta: `₪${overdueTotalFines.toFixed(0)} in fines`,
+      delta: 'needs follow-up',
       trend: 'down',
       spark: spreadSpark(overdue.length, 12),
       icon: ICONS.overdue,
@@ -324,7 +323,7 @@ export function LibrarianDashboard() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-xl text-ink-900">Overdue</h2>
-              <p className="text-xs text-ink-500 mt-0.5">3 readers, ₪32 in fines</p>
+              <p className="text-xs text-ink-500 mt-0.5">{overdue.length} to follow up</p>
             </div>
             <Link
               to="/librarian/loans"
@@ -375,7 +374,7 @@ export function LibrarianDashboard() {
                     </div>
                     <div className="text-xs text-ink-500 mt-0.5">{who}</div>
                     <div className="text-xs text-coral-dark font-medium mt-1">
-                      ₪{l.fine} accrued
+                      {l.daysOverdue} days overdue
                     </div>
                   </div>
                   <button className="btn-ghost text-xs">Remind</button>

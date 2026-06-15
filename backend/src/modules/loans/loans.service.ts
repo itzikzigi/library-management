@@ -3,7 +3,6 @@ import { prisma } from '../../lib/prisma.js'
 import { HttpError } from '../../utils/HttpError.js'
 import { fulfillNextInQueue } from '../reservations/reservations.service.js'
 import {
-  FINE_PER_DAY,
   LOAN_PERIOD_DAYS,
   MAX_ACTIVE_LOANS_PER_READER,
   MAX_RENEWALS,
@@ -60,22 +59,17 @@ export async function borrow(userId: string, bookId: string) {
 }
 
 /**
- * Mark a loan as returned. Caller must be the borrower or a librarian.
+ * Mark a loan as returned. Librarian-only — readers hand books back at the
+ * desk and a librarian records the return. Route-level requireRole('LIBRARIAN')
+ * enforces this; the service trusts that gate.
  * Flips the copy back to AVAILABLE in the same transaction.
  */
-export async function returnLoan(
-  loanId: string,
-  requesterId: string,
-  requesterRole: 'READER' | 'LIBRARIAN',
-) {
+export async function returnLoan(loanId: string) {
   const loan = await prisma.loan.findUnique({
     where: { id: loanId },
     include: { copy: { select: { bookId: true } } },
   })
   if (!loan) throw new HttpError(404, 'NOT_FOUND', 'Loan not found')
-  if (loan.borrowerId !== requesterId && requesterRole !== 'LIBRARIAN') {
-    throw new HttpError(403, 'FORBIDDEN', 'You can only return your own loans')
-  }
   if (loan.returnedAt) {
     throw new HttpError(400, 'ALREADY_RETURNED', 'This loan was already returned')
   }
@@ -216,7 +210,6 @@ export function toLoanDTO(loan: LoanWithBook | LoanWithBorrower, includeBorrower
     status === 'overdue'
       ? Math.floor((now.getTime() - loan.dueAt.getTime()) / msInDay)
       : 0
-  const fine = daysOverdue > 0 ? daysOverdue * FINE_PER_DAY : 0
   const canRenew =
     status === 'on-loan' && loan.renewals < MAX_RENEWALS && daysOverdue === 0
 
@@ -229,7 +222,6 @@ export function toLoanDTO(loan: LoanWithBook | LoanWithBorrower, includeBorrower
     status,
     daysUntilDue,
     daysOverdue,
-    fine,
     canRenew,
     book: {
       id: loan.copy.book.id,

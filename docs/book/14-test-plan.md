@@ -69,8 +69,8 @@ phases appear at the end of this chapter.
 | F31 | loans | Return + reservation fulfilment | `POST /loans/:id/return` on a book with a pending reservation queue | 200, copy `AVAILABLE`, head of queue flips `PENDING → FULFILLED` in the same transaction, others' `queuePosition` decrements | Pass (worklog #14) |
 | F32 | loans | Double return | `POST /loans/:id/return` twice | second → 400 `ALREADY_RETURNED` | Pass (worklog #9) |
 | F33 | loans | Reader 403 on `/loans` (all) | `GET /loans` as `READER` | 403 `FORBIDDEN` | Pass (worklog #9) |
-| F34 | loans | Self-or-librarian return | Reader A returns Reader B's loan | 403 | Pass (worklog #9) |
-| F35 | loans | Overdue fines aggregate | `GET /loans?status=overdue` as librarian | each loan carries `fine = daysOverdue × 2`; matches dashboard tile totals | Pass (worklog #9) |
+| F34 | loans | Reader cannot return | Reader calls `POST /loans/:id/return` (own loan or another's) | 403 `FORBIDDEN` — returns are librarian-only | Pass (worklog #19) |
+| F35 | loans | Overdue derivation | `GET /loans?status=overdue` as librarian | each loan carries `status: 'overdue'` and a correct `daysOverdue` (no `fine` field — fines were dropped, worklog #19) | Pass (worklog #19) |
 | F36 | reservations | Place on hold | `POST /books/:id/reservations` on 0-available book | 201, `queuePosition: 1` | Pass (worklog #14) |
 | F37 | reservations | Copies available | `POST /books/:id/reservations` on book with available copies | 409 `COPIES_AVAILABLE` (borrow instead) | Pass (worklog #14) |
 | F38 | reservations | Duplicate hold | Second `POST /books/:id/reservations` from same reader | 409 `ALREADY_RESERVED` | Pass (worklog #14) |
@@ -78,7 +78,7 @@ phases appear at the end of this chapter.
 | F40 | reservations | Cancel | `DELETE /reservations/:id` as owner | 204; downstream `queuePosition` decrements | Pass (worklog #14) |
 | F41 | reservations | Cancel someone else's | `DELETE /reservations/:other` | 403 | Pass (worklog #14) |
 | F42 | reservations | Listing — queue position | `GET /me/reservations` with two reservations on same book in different orders | each row's `queuePosition` matches `createdAt asc` order | Pass (worklog #14) |
-| F43 | members | List with filters | `GET /members?status=has-fines` as librarian | only members with outstanding fines; totals match dashboard | Pass (worklog #12) |
+| F43 | members | List with filters | `GET /members?status=active-loans` as librarian | only members with ≥1 active loan; each row carries `activeLoans`/`overdueLoans` | Pass (worklog #19) |
 | F44 | members | Reader 403 on list | `GET /members` as reader | 403 `FORBIDDEN` | Pass (worklog #12) |
 | F45 | members | Self-demote blocked | `PATCH /members/:self` with `role: 'READER'` (self is librarian) | 403 `SELF_DEMOTE` | Pass (worklog #12) |
 | F46 | members | Delete with history | `DELETE /members/:withLoans` | 409 `HAS_LOAN_HISTORY` | Pass (worklog #12) |
@@ -92,7 +92,7 @@ phases appear at the end of this chapter.
 | F54 | global | CORS preflight | `OPTIONS` from `http://localhost:5173` | `Allow-Origin: http://localhost:5173`, `Allow-Credentials: true` | Pass (worklog #8) |
 | F55 | frontend | Boot session restore | Load app with valid refresh cookie | Exactly one `/auth/refresh` fires (deduplicated under React StrictMode); UI lands on the requested route, not `/login` | Pass (worklog #15) |
 | F56 | frontend | Login → /my-loans redirect | Login from a `RequireAuth` redirect | After successful login, lands on the original target route | Pass (worklog #8, #9) |
-| F57 | frontend | Borrow flow | Click Borrow on a book detail page as a reader | Loan created, redirect to `/my-loans`, the new loan appears with Renew + Return buttons | Pass (worklog #9) |
+| F57 | frontend | Borrow flow | Click Borrow on a book detail page as a reader | Loan created, redirect to `/my-loans`, the new loan appears with a Renew button (returns are librarian-only, worklog #19) | Pass (worklog #19) |
 
 ---
 
@@ -126,12 +126,12 @@ phases appear at the end of this chapter.
 | U24 | `books.schema.createBookBody` | `language` outside enum | ZodError | Planned |
 | U25 | `loans.service` — derived `status` | active loan with `dueDate > now` | `'ACTIVE'` | Planned |
 | U26 | `loans.service` — derived `status` | active loan with `dueDate < now` | `'OVERDUE'` | Planned |
-| U27 | `loans.service.fineFor` | returned 3 days late, `FINE_PER_DAY=2` | `6` | Planned |
+| U27 | — | — | *Removed: fines feature dropped (worklog #19)* | N/A |
 | U28 | `loans.service.canRenew` | renewals=1, not overdue | `true` | Planned |
 | U29 | `loans.service.canRenew` | renewals=2 | `false` | Planned |
 | U30 | `loans.service.canRenew` | overdue | `false` | Planned |
 | U31 | `reservations.service.queuePositionsFor` | three PENDING reservations on same book, distinct `createdAt` | `[1, 2, 3]` in createdAt-asc order | Planned |
-| U32 | `members.service.outstandingFine` | member with one returned-late loan (3d × 2 ₪) and one active | `6` (only late portion counts) | Planned |
+| U32 | — | — | *Removed: fines feature dropped (worklog #19)* | N/A |
 
 ---
 
