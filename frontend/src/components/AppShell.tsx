@@ -1,36 +1,43 @@
-import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { useState } from 'react'
-import { useAuth } from '../lib/AuthProvider'
+import {
+  Link,
+  NavLink,
+  Outlet,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
+import { useState } from "react";
+import { useAuth } from "../lib/AuthProvider";
 
 const READER_NAV = [
-  { to: '/', label: 'Catalog' },
-  { to: '/recommendations', label: 'For You' },
-  { to: '/my-loans', label: 'My Loans' },
-]
+  { to: "/", label: "Catalog" },
+  { to: "/recommendations", label: "For You" },
+  { to: "/my-loans", label: "My Loans" },
+];
 
 const LIBRARIAN_NAV = [
-  { to: '/librarian', label: 'Dashboard' },
-  { to: '/librarian/books', label: 'Books' },
-  { to: '/librarian/members', label: 'Members' },
-  { to: '/librarian/loans', label: 'Loans' },
-]
+  { to: "/librarian", label: "Dashboard" },
+  { to: "/librarian/books", label: "Books" },
+  { to: "/librarian/members", label: "Members" },
+  { to: "/librarian/loans", label: "Loans" },
+];
 
 export function AppShell() {
-  const location = useLocation()
-  const navigate = useNavigate()
-  const { user, status, logout } = useAuth()
-  const [menuOpen, setMenuOpen] = useState(false)
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { user, status, logout } = useAuth();
+  const [menuOpen, setMenuOpen] = useState(false);
 
-  const inLibrarianArea = location.pathname.startsWith('/librarian')
-  const nav = inLibrarianArea && user?.role === 'LIBRARIAN' ? LIBRARIAN_NAV : READER_NAV
+  const inLibrarianArea = location.pathname.startsWith("/librarian");
+  const nav =
+    inLibrarianArea && user?.role === "LIBRARIAN" ? LIBRARIAN_NAV : READER_NAV;
   const initials = user
     ? `${user.firstName.charAt(0)}${user.lastName.charAt(0)}`.toUpperCase()
-    : null
+    : null;
 
   async function onLogout() {
-    setMenuOpen(false)
-    await logout()
-    navigate('/login', { replace: true })
+    setMenuOpen(false);
+    await logout();
+    navigate("/login", { replace: true });
   }
 
   return (
@@ -38,19 +45,19 @@ export function AppShell() {
       <header className="sticky top-0 z-10 bg-parchment-50/90 backdrop-blur border-b border-ink-100">
         <div className="mx-auto max-w-7xl px-6 h-14 flex items-center gap-6">
           <Link to="/" className="font-serif text-lg text-ink-900">
-            <span className="text-amber-dark">❦</span> Pages
+            <span className="text-amber-dark">❦</span> Safran
           </Link>
           <nav className="hidden md:flex items-center gap-1">
             {nav.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
-                end={item.to === '/' || item.to === '/librarian'}
+                end={item.to === "/" || item.to === "/librarian"}
                 className={({ isActive }) =>
                   `px-3 py-1.5 rounded-md text-sm ${
                     isActive
-                      ? 'bg-ink-100 text-ink-900 font-medium'
-                      : 'text-ink-600 hover:text-ink-900 hover:bg-ink-50'
+                      ? "bg-ink-100 text-ink-900 font-medium"
+                      : "text-ink-600 hover:text-ink-900 hover:bg-ink-50"
                   }`
                 }
               >
@@ -59,15 +66,15 @@ export function AppShell() {
             ))}
           </nav>
           <div className="flex-1" />
-          {user?.role === 'LIBRARIAN' && (
+          {user?.role === "LIBRARIAN" && (
             <Link
-              to={inLibrarianArea ? '/' : '/librarian'}
+              to={inLibrarianArea ? "/" : "/librarian"}
               className="text-xs text-ink-500 hover:text-ink-800"
             >
-              {inLibrarianArea ? 'View as reader' : 'Manage library →'}
+              {inLibrarianArea ? "View as reader" : "Manage library →"}
             </Link>
           )}
-          {status === 'authenticated' && user ? (
+          {status === "authenticated" && user ? (
             <div className="relative">
               <button
                 type="button"
@@ -83,9 +90,15 @@ export function AppShell() {
                     <div className="text-sm font-medium text-ink-900 truncate">
                       {user.firstName} {user.lastName}
                     </div>
-                    <div className="text-xs text-ink-500 truncate">{user.email}</div>
+                    <div className="text-xs text-ink-500 truncate">
+                      {user.email}
+                    </div>
                     <div className="mt-1">
-                      <span className={user.role === 'LIBRARIAN' ? 'chip-accent' : 'chip'}>
+                      <span
+                        className={
+                          user.role === "LIBRARIAN" ? "chip-accent" : "chip"
+                        }
+                      >
                         {user.role.toLowerCase()}
                       </span>
                     </div>
@@ -101,7 +114,7 @@ export function AppShell() {
                 </div>
               )}
             </div>
-          ) : status === 'unauthenticated' ? (
+          ) : status === "unauthenticated" ? (
             <Link to="/login" className="btn-secondary text-xs">
               Sign in
             </Link>
@@ -114,8 +127,9 @@ export function AppShell() {
         <Outlet />
       </main>
       <footer className="border-t border-ink-100 py-6 text-center text-xs text-ink-400">
-        Pages · MAHAT project · {status === 'authenticated' ? 'logged in' : 'guest mode'}
+        Safran · MAHAT project ·{" "}
+        {status === "authenticated" ? "logged in" : "guest mode"}
       </footer>
     </div>
-  )
+  );
 }
